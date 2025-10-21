@@ -26,7 +26,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5176',
+  origin: process.env.CORS_ORIGIN || ['http://localhost:5176', 'https://credion-1.onrender.com'],
   credentials: true
 }));
 
