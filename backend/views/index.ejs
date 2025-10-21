@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Credion API Server</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+        }
+        .status {
+            background: #27ae60;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .endpoints {
+            background: #ecf0f1;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .endpoint {
+            margin: 10px 0;
+            font-family: monospace;
+            background: white;
+            padding: 10px;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Credion API Server</h1>
+        <div class="status">
+            ✅ Server is running successfully!
+        </div>
+        
+        <div class="endpoints">
+            <h3>Available API Endpoints:</h3>
+            <div class="endpoint">GET /health - Health check</div>
+            <div class="endpoint">POST /auth/login - User login</div>
+            <div class="endpoint">POST /auth/register - User registration</div>
+            <div class="endpoint">GET /payment-methods - Get payment methods</div>
+            <div class="endpoint">POST /payment-methods - Add payment method</div>
+            <div class="endpoint">GET /dashboard - Dashboard data</div>
+        </div>
+        
+        <p><strong>Environment:</strong> <%= process.env.NODE_ENV || 'development' %></p>
+        <p><strong>Timestamp:</strong> <%= new Date().toISOString() %></p>
+    </div>
+</body>
+</html>

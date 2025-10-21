@@ -26,7 +26,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? 'https://credion.bolt.new' : 'http://localhost:5174'),
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5174',
   credentials: true
 }));
 
@@ -51,7 +51,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // View engine setup
 app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, '../views'));
+app.set('views', path.join(__dirname, 'views'));
 
 // Routes
 app.get('/', (req, res) => {
@@ -401,18 +401,7 @@ app.listen(PORT, async () => {
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   
   // Test database connection
-  try {
-    const connected = await testConnection();
-    if (connected) {
-      console.log('✅ Database connection established successfully');
-    } else {
-      console.log('⚠️  Database connection failed - server will continue without database');
-      console.log('💡 For Bolt deployment, ensure database environment variables are set correctly.');
-    }
-  } catch (error) {
-    console.log('⚠️  Database connection test failed:', error.message);
-    console.log('💡 Server will continue without database connection for Bolt deployment.');
-  }
+  await testConnection();
 });
 
 module.exports = app;
