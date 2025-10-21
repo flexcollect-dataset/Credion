@@ -1,0 +1,27 @@
+# Environment Variables for Bolt.new Deployment
+# Copy these variables to Bolt.new environment section
+
+# Database Configuration (Live AWS RDS)
+DB_HOST=flexdataset.cluster-cpoeqq6cwu00.ap-southeast-2.rds.amazonaws.com
+DB_NAME=FlexDataseterMaster
+DB_USER=rutvikkorat
+DB_PASS=your_actual_database_password_here
+DB_PORT=5432
+
+# Stripe Test Keys (Replace with your actual test keys)
+STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
+STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key_here
+
+# Session & Security
+SESSION_SECRET=your-super-secret-session-key-change-this-to-something-random
+NODE_ENV=production
+
+# CORS (Bolt will provide the actual URL)
+CORS_ORIGIN=https://your-bolt-frontend-url.bolt.new
+
+# Port
+PORT=3000
+
+# Frontend Environment Variables
+VITE_API_BASE_URL=https://your-bolt-backend-url.bolt.new
+VITE_STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key_here

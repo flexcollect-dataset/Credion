@@ -150,6 +150,20 @@ const Dashboard = () => {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await apiService.logout();
+      localStorage.removeItem('user');
+      localStorage.removeItem('accessToken');
+      window.location.href = '/login';
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Force logout even if API call fails
+      localStorage.removeItem('user');
+      localStorage.removeItem('accessToken');
+      window.location.href = '/login';
+    }
+  };
 
   if (isLoading) {
     return (

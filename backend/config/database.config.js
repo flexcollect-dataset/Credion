@@ -4,9 +4,9 @@ module.exports = {
     development: {
         host: process.env.DB_HOST || 'localhost',
         database: process.env.DB_NAME || 'FlexDataseterMaster',
-        username: process.env.DB_USER || 'rutvikkorat',
+        username: process.env.DB_USER || 'FlexUser',
         password: process.env.DB_PASS || 'Luffy123&&Lucky',
-        port: process.env.DB_PORT || 5432,
+        port: process.env.DB_PORT || 15432,
         dialect: 'postgres',
         logging: false,
         pool: {

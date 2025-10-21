@@ -13,6 +13,7 @@ import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
 import PaymentMethod from './pages/PaymentMethod';
 import PaymentMethods from './pages/PaymentMethods';
+import Profile from './pages/Profile';
 import Government from './pages/Government';
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/profile" element={<Profile />} />
             <Route path="/payment-method" element={<PaymentMethod />} />
             <Route path="/payment-methods" element={<PaymentMethods />} />
             <Route path="/government" element={<Government />} />

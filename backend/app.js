@@ -26,7 +26,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5174',
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5176',
   credentials: true
 }));
 
@@ -51,7 +51,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 
 // View engine setup
 app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, 'views'));
+app.set('views', path.join(__dirname, '../views'));
 
 // Routes
 app.get('/', (req, res) => {

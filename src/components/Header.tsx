@@ -89,14 +89,14 @@ const Header = () => {
           <div className="hidden md:flex items-center space-x-4">
             {user ? (
               <div className="flex items-center space-x-4">
-                <div className="flex items-center space-x-2">
+                <Link
+                  to="/profile"
+                  className="flex items-center hover:opacity-80 transition-opacity cursor-pointer"
+                >
                   <div className="w-8 h-8 bg-credion-red rounded-full flex items-center justify-center">
                     <User className="text-white" size={16} />
                   </div>
-                  <span className="text-sm font-medium text-credion-charcoal">
-                    {user.firstName}
-                  </span>
-                </div>
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="flex items-center space-x-1 text-sm font-medium text-credion-charcoal hover:text-credion-red transition-colors duration-200"
@@ -153,14 +153,15 @@ const Header = () => {
               <div className="px-4 py-2 space-y-2">
                 {user ? (
                   <div className="space-y-2">
-                    <div className="flex items-center space-x-2 py-2">
+                    <Link
+                      to="/profile"
+                      onClick={() => setIsMobileMenuOpen(false)}
+                      className="flex items-center py-2 hover:bg-gray-50 rounded-lg px-2 transition-colors"
+                    >
                       <div className="w-8 h-8 bg-credion-red rounded-full flex items-center justify-center">
                         <User className="text-white" size={16} />
                       </div>
-                      <span className="text-sm font-medium text-credion-charcoal">
-                        {user.firstName}
-                      </span>
-                    </div>
+                    </Link>
                     <button
                       onClick={() => {
                         handleLogout();
