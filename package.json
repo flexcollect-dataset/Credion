@@ -4,9 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "npx serve -s dist -l $PORT",
+    "dev": "npx serve -s dist -l $PORT --single",
     "build": "tsc && vite build",
-    "start": "npx serve -s dist -l $PORT",
+    "start": "npx serve -s dist -l $PORT --single",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview"
   },

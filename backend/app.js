@@ -49,15 +49,13 @@ app.use(session({
 // Static files
 app.use(express.static(path.join(__dirname, '../public')));
 
-// View engine setup
-app.set('view engine', 'ejs');
-app.set('views', path.join(__dirname, '../views'));
-
-// Routes
+// API Routes
 app.get('/', (req, res) => {
-  res.render('index', { 
-    title: 'Credion - Home',
-    appName: process.env.APP_NAME || 'Credion'
+  res.json({ 
+    message: 'Credion API Server',
+    status: 'running',
+    version: '1.0.0',
+    timestamp: new Date().toISOString()
   });
 });
 
