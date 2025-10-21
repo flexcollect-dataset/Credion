@@ -400,8 +400,13 @@ app.listen(PORT, async () => {
   console.log(`🚀 Credion server is running on http://localhost:${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   
-  // Test database connection
-  await testConnection();
+  // Test database connection (optional)
+  try {
+    await testConnection();
+  } catch (error) {
+    console.log('⚠️  Database connection failed, but server will continue running');
+    console.log('💡 Set up database environment variables to enable database features');
+  }
 });
 
 module.exports = app;
