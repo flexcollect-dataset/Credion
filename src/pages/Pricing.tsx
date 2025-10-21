@@ -1,7 +1,17 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, Check, Zap, TrendingUp, Building } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 const Pricing = () => {
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      setUser(JSON.parse(userData));
+    }
+  }, []);
+
   const plans = [
     {
       name: 'Starter',
@@ -212,10 +222,12 @@ const Pricing = () => {
             Start your free trial today and see how Credion can protect your cashflow.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/contact" className="bg-credion-red hover:bg-credion-red-dark text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl inline-flex items-center justify-center">
-              Signup
-              <ArrowRight className="ml-2" size={20} />
-            </Link>
+            {!user && (
+              <Link to="/signup" className="bg-credion-red hover:bg-credion-red-dark text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl inline-flex items-center justify-center">
+                Signup
+                <ArrowRight className="ml-2" size={20} />
+              </Link>
+            )}
             <Link to="/contact" className="border-2 border-white text-white hover:bg-white hover:text-credion-charcoal font-semibold py-4 px-8 rounded-lg transition-all duration-200 inline-flex items-center justify-center">
               Request Quote
             </Link>

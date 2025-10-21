@@ -62,7 +62,7 @@ const Header = () => {
       <div className="container-custom">
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2">
+          <Link to={user ? "/dashboard" : "/"} className="flex items-center space-x-2">
             <img 
               src="/Asset 2@4x-8.png" 
               alt="Credion" 

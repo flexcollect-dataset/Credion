@@ -1,9 +1,19 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, BarChart3, Shield, Bell } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import ScoreDial from '../components/ScoreDial';
 import NetworkVisualization from '../components/NetworkVisualization';
 
 const Home = () => {
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      setUser(JSON.parse(userData));
+    }
+  }, []);
+
   return (
     <div className="pt-16 md:pt-20">
       {/* Hero Section */}
@@ -28,9 +38,11 @@ const Home = () => {
                   Check a Client
                   <ArrowRight className="ml-2" size={20} />
                 </Link>
-                <Link to="/contact" className="btn-secondary text-lg px-8 py-4 inline-flex items-center justify-center">
-                  Signup
-                </Link>
+                {!user && (
+                  <Link to="/signup" className="btn-secondary text-lg px-8 py-4 inline-flex items-center justify-center">
+                    Signup
+                  </Link>
+                )}
               </div>
             </div>
             
@@ -271,10 +283,12 @@ const Home = () => {
             Join hundreds of businesses using Credion to make smarter credit decisions.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/contact" className="bg-credion-red hover:bg-credion-red-dark text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl inline-flex items-center justify-center">
-              Signup
-              <ArrowRight className="ml-2" size={20} />
-            </Link>
+            {!user && (
+              <Link to="/signup" className="bg-credion-red hover:bg-credion-red-dark text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl inline-flex items-center justify-center">
+                Signup
+                <ArrowRight className="ml-2" size={20} />
+              </Link>
+            )}
             <Link to="/contact" className="border-2 border-white text-white hover:bg-white hover:text-credion-charcoal font-semibold py-4 px-8 rounded-lg transition-all duration-200 inline-flex items-center justify-center">
               Request Demo
             </Link>

@@ -1,8 +1,18 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, Zap, FileText, Eye, Cpu, AlertTriangle, BarChart } from 'lucide-react';
+import { useState, useEffect } from 'react';
 import ScoreDial from '../components/ScoreDial';
 
 const Product = () => {
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      setUser(JSON.parse(userData));
+    }
+  }, []);
+
   const features = [
     {
       icon: <Zap className="text-credion-red" size={24} />,
@@ -197,10 +207,12 @@ const Product = () => {
             See how predictive credit scoring can transform your risk management.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link to="/contact" className="bg-credion-red hover:bg-credion-red-dark text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl inline-flex items-center justify-center">
-              Signup
-              <ArrowRight className="ml-2" size={20} />
-            </Link>
+            {!user && (
+              <Link to="/signup" className="bg-credion-red hover:bg-credion-red-dark text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl inline-flex items-center justify-center">
+                Signup
+                <ArrowRight className="ml-2" size={20} />
+              </Link>
+            )}
             <Link to="/pricing" className="border-2 border-white text-white hover:bg-white hover:text-credion-charcoal font-semibold py-4 px-8 rounded-lg transition-all duration-200 inline-flex items-center justify-center">
               View Pricing
             </Link>

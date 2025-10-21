@@ -1,7 +1,16 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Mail, MapPin, Clock, ArrowRight, CheckCircle } from 'lucide-react';
 
 const Contact = () => {
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      setUser(JSON.parse(userData));
+    }
+  }, []);
+
   const [formData, setFormData] = useState({
     name: '',
     company: '',
@@ -306,13 +315,15 @@ Please schedule a demo of the Credion platform and ProbR Score.
             Start your free trial today and see the difference predictive credit intelligence makes.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button
-              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="bg-credion-red hover:bg-credion-red-dark text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl inline-flex items-center justify-center"
-            >
-              Signup
-              <ArrowRight className="ml-2" size={20} />
-            </button>
+            {!user && (
+              <button
+                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                className="bg-credion-red hover:bg-credion-red-dark text-white font-semibold py-4 px-8 rounded-lg transition-all duration-200 transform hover:scale-105 shadow-lg hover:shadow-xl inline-flex items-center justify-center"
+              >
+                Signup
+                <ArrowRight className="ml-2" size={20} />
+              </button>
+            )}
           </div>
         </div>
       </section>

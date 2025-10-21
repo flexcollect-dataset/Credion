@@ -158,6 +158,43 @@ class ApiService {
       body: JSON.stringify({ userId }),
     });
   }
+
+  // Search functionality - Direct call to Australian Business Register API
+  async searchABNByName(searchTerm: string): Promise<{ success: boolean; results: any[] }> {
+    const ABN_GUID = '250e9f55-f46e-4104-b0df-774fa28cff97';
+    const url = `https://abr.business.gov.au/json/MatchingNames.aspx?name=${encodeURIComponent(searchTerm)}&maxResults=10&guid=${ABN_GUID}`;
+    
+    try {
+      const response = await fetch(url);
+      const text = await response.text();
+      
+      // Extract JSON from JSONP response
+      const match = text.match(/callback\((.*)\)/);
+      if (!match) {
+        throw new Error('Invalid ABN lookup response format');
+      }
+      
+      const data = JSON.parse(match[1]);
+      const results = data.Names || [];
+      
+      return {
+        success: true,
+        results: results.map((result: any) => ({
+          Abn: result.Abn,
+          Name: result.Name || 'Unknown',
+          entityStatus: 'Available via ABN lookup',
+          entityType: 'Available via ABN lookup',
+          address: 'Available via ABN lookup'
+        }))
+      };
+    } catch (error) {
+      console.error('Error searching ABN by name:', error);
+      return {
+        success: false,
+        results: []
+      };
+    }
+  }
 }
 
 export const apiService = new ApiService();
