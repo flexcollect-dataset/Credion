@@ -26,7 +26,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? 'https://your-bolt-domain.bolt.new' : 'http://localhost:5174'),
+  origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? 'https://credion.bolt.new' : 'http://localhost:5174'),
   credentials: true
 }));
 
