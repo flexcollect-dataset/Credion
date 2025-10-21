@@ -394,9 +394,10 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, async () => {
-  console.log(`🚀 Credion server is running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', async () => {
+  console.log(`🚀 Credion server is running on http://0.0.0.0:${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔧 PORT from environment: ${process.env.PORT}`);
   
   // Test database connection (optional)
   try {
