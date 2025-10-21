@@ -282,8 +282,8 @@ app.get('/card-details', async (req, res) => {
       return res.redirect('/auth/login');
     }
     
-    res.render('card-details', { 
-      title: 'Add Payment Method - Credion',
+    res.json({ 
+      message: 'Payment method page data',
       userId: user.userId,
       userEmail: user.email,
       firstName: user.firstName,
@@ -314,8 +314,8 @@ app.get('/payment-methods', async (req, res) => {
       return res.redirect('/auth/login');
     }
     
-    res.render('payment-methods', { 
-      title: 'Payment Methods - Credion',
+    res.json({ 
+      message: 'Payment methods page data',
       userId: user.userId,
       userEmail: user.email,
       firstName: user.firstName,
@@ -346,8 +346,8 @@ app.get('/search', async (req, res) => {
       return res.redirect('/auth/login');
     }
     
-    res.render('search', { 
-      title: 'Search - Credion',
+    res.json({ 
+      message: 'Search page data',
       user: {
         userId: user.userId,
         firstName: user.firstName,
