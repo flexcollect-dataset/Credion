@@ -7,7 +7,6 @@ const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [user, setUser] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -26,7 +25,6 @@ const Header = () => {
     if (userData) {
       setUser(JSON.parse(userData));
     }
-    setIsLoading(false);
   }, [location.pathname]); // Re-check when route changes
 
   const handleLogout = async () => {

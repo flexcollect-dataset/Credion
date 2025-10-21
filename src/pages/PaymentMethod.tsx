@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { CreditCard, Check, X } from 'lucide-react';
+import { CreditCard, Check } from 'lucide-react';
 import { apiService } from '../services/api';
 
 const PaymentMethod = () => {
