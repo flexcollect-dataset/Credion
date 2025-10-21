@@ -26,7 +26,7 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5174',
+  origin: process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? 'https://your-bolt-domain.bolt.new' : 'http://localhost:5174'),
   credentials: true
 }));
 
@@ -401,7 +401,18 @@ app.listen(PORT, async () => {
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   
   // Test database connection
-  await testConnection();
+  try {
+    const connected = await testConnection();
+    if (connected) {
+      console.log('✅ Database connection established successfully');
+    } else {
+      console.log('⚠️  Database connection failed - server will continue without database');
+      console.log('💡 For Bolt deployment, ensure database environment variables are set correctly.');
+    }
+  } catch (error) {
+    console.log('⚠️  Database connection test failed:', error.message);
+    console.log('💡 Server will continue without database connection for Bolt deployment.');
+  }
 });
 
 module.exports = app;

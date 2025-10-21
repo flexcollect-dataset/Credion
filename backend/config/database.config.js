@@ -20,11 +20,11 @@ module.exports = {
         }
     },
     production: {
-        host: process.env.DB_HOST,
-        database: process.env.DB_NAME,
-        username: process.env.DB_USER,
-        password: process.env.DB_PASS,
-        port: process.env.DB_PORT || 5432,
+        host: process.env.DB_HOST || 'localhost',
+        database: process.env.DB_NAME || 'FlexDataseterMaster',
+        username: process.env.DB_USER || 'FlexUser',
+        password: process.env.DB_PASS || 'Luffy123&&Lucky',
+        port: process.env.DB_PORT || 15432,
         dialect: 'postgres',
         logging: false,
         pool: {
@@ -34,10 +34,10 @@ module.exports = {
             idle: 10000
         },
         dialectOptions: {
-            ssl: {
+            ssl: process.env.NODE_ENV === 'production' ? {
                 require: true,
                 rejectUnauthorized: false
-            }
+            } : false
         }
     }
 };
