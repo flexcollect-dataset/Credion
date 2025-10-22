@@ -393,6 +393,9 @@ app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Credion server is running on http://0.0.0.0:${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔧 PORT from environment: ${process.env.PORT}`);
+  console.log(`🔧 DB_HOST: ${process.env.DB_HOST}`);
+  console.log(`🔧 DB_PORT: ${process.env.DB_PORT}`);
+  console.log(`🔧 DB_NAME: ${process.env.DB_NAME}`);
   
   // Test database connection (optional)
   try {
