@@ -362,83 +362,13 @@ app.get('/search', async (req, res) => {
   }
 });
 
-// Payment Routes (commented out to avoid database dependencies)
-// const paymentRoutes = require('./routes/payment.routes');
-// app.use('/api/payment', paymentRoutes);
+// Payment Routes
+const paymentRoutes = require('./routes/payment.routes');
+app.use('/api/payment', paymentRoutes);
 
-// Simple mock authentication routes (no database required)
-app.post('/auth/login', (req, res) => {
-  try {
-    const { email, password } = req.body;
-    
-    // Mock authentication - accept any email/password for now
-    if (email && password) {
-      // Create mock user session
-      req.session.userId = 1;
-      req.session.user = {
-        userId: 1,
-        email: email,
-        firstName: 'Test',
-        lastName: 'User',
-        isActive: true
-      };
-      
-      res.json({
-        success: true,
-        message: 'Login successful',
-        user: {
-          userId: 1,
-          email: email,
-          firstName: 'Test',
-          lastName: 'User',
-          currentPlan: 'monthly'
-        },
-        accessToken: 'mock-token-' + Date.now(),
-        redirectUrl: '/dashboard'
-      });
-    } else {
-      res.status(400).json({
-        success: false,
-        message: 'Email and password are required'
-      });
-    }
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Login failed'
-    });
-  }
-});
-
-app.post('/auth/logout', (req, res) => {
-  req.session.destroy();
-  res.json({
-    success: true,
-    message: 'Logout successful'
-  });
-});
-
-app.post('/auth/check-email', (req, res) => {
-  res.json({ exists: false });
-});
-
-app.post('/auth/check-mobile', (req, res) => {
-  res.json({ exists: false });
-});
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'Credion API is running',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// API Routes (commented out to avoid database dependencies)
-// const apiRoutes = require('./routes/api.routes');
-// app.use('/api', apiRoutes);
+// API Routes
+const apiRoutes = require('./routes/api.routes');
+app.use('/api', apiRoutes);
 
 // 404 handler
 app.use((req, res) => {
