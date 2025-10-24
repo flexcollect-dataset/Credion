@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { User, UserPaymentMethod, Report } = require('../models');
-const ReportParser = require('../services/reportParser');
 const axios = require('axios');
 
 // Middleware to check if user is authenticated
@@ -110,6 +109,503 @@ async function fetchReportData(uuid, bearerToken) {
     }
 }
 
+// Function to parse and store report data in normalized tables
+async function parseAndStoreReportData(reportId, reportData) {
+    const { sequelize } = require('../config/db');
+    
+    try {
+        console.log('📊 Parsing and storing report data for report ID:', reportId);
+        
+        // 1. Store Entity data
+        if (reportData.entity) {
+            const entityData = reportData.entity;
+            await sequelize.query(`
+                INSERT INTO entities (
+                    report_id, abn, acn, is_arbn, abr_gst_registration_date, 
+                    abr_gst_status, abr_postcode, abr_state, abr_status, 
+                    asic_date_of_registration, asic_status, document_number, 
+                    former_names, name, reference, review_date, name_start_at, 
+                    registered_in, organisation_type, disclosing_entity, 
+                    organisation_class, organisation_sub_class
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+                )
+            `, {
+                bind: [
+                    reportId,
+                    entityData.abn,
+                    entityData.acn,
+                    entityData.is_arbn,
+                    entityData.abr_gst_registration_date,
+                    entityData.abr_gst_status,
+                    entityData.abr_postcode,
+                    entityData.abr_state,
+                    entityData.abr_status,
+                    entityData.asic_date_of_registration,
+                    entityData.asic_status,
+                    entityData.document_number,
+                    JSON.stringify(entityData.former_names || []),
+                    entityData.name,
+                    entityData.reference,
+                    entityData.review_date,
+                    entityData.name_start_at,
+                    entityData.registered_in,
+                    entityData.organisation_type,
+                    entityData.disclosing_entity,
+                    entityData.organisation_class,
+                    entityData.organisation_sub_class
+                ]
+            });
+            console.log('✅ Entity data stored');
+        }
+        
+        // 2. Store ASIC Extract data
+        if (reportData.asic_extracts) {
+            const asicExtract = reportData.asic_extracts;
+            const [asicResult] = await sequelize.query(`
+                INSERT INTO asic_extracts (report_id, external_id) 
+                VALUES ($1, $2) 
+                RETURNING asic_extract_id
+            `, {
+                bind: [reportId, asicExtract.external_id]
+            });
+            
+            const asicExtractId = asicResult[0].asic_extract_id;
+            console.log('✅ ASIC Extract stored with ID:', asicExtractId);
+            
+            // 3. Store Addresses
+            if (asicExtract.addresses && Array.isArray(asicExtract.addresses)) {
+                for (const address of asicExtract.addresses) {
+                    await sequelize.query(`
+                        INSERT INTO addresses (
+                            asic_extract_id, type, entity, address, care_of, address_1, 
+                            address_2, suburb, state, postcode, country, status, 
+                            start_date, end_date, document_number, address_category
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+                        )
+                    `, {
+                        bind: [
+                            asicExtractId,
+                            address.type,
+                            address.entity,
+                            address.address,
+                            address.care_of,
+                            address.address_1,
+                            address.address_2,
+                            address.suburb,
+                            address.state,
+                            address.postcode,
+                            address.country,
+                            address.status,
+                            address.start_date,
+                            address.end_date,
+                            address.document_number,
+                            'company'
+                        ]
+                    });
+                }
+                console.log('✅ Addresses stored');
+            }
+            
+            // 4. Store Directors
+            if (asicExtract.directors && Array.isArray(asicExtract.directors)) {
+                for (const director of asicExtract.directors) {
+                    await sequelize.query(`
+                        INSERT INTO directors (
+                            asic_extract_id, type, name, dob, place_of_birth, 
+                            director_id_external, document_number, start_date, 
+                            end_date, status, address_data
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+                        )
+                    `, {
+                        bind: [
+                            asicExtractId,
+                            director.type,
+                            director.name,
+                            director.dob,
+                            director.place_of_birth,
+                            director.director_id_external,
+                            director.document_number,
+                            director.start_date,
+                            director.end_date,
+                            director.status,
+                            director.address ? JSON.stringify(director.address) : null
+                        ]
+                    });
+                }
+                console.log('✅ Directors stored');
+            }
+            
+            // 5. Store Shareholders
+            if (asicExtract.shareholders && Array.isArray(asicExtract.shareholders)) {
+                for (const shareholder of asicExtract.shareholders) {
+                    await sequelize.query(`
+                        INSERT INTO shareholders (
+                            asic_extract_id, name, acn, class, number_held, 
+                            percentage_held, document_number, beneficially_owned, 
+                            fully_paid, jointly_held, status, address_data
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+                        )
+                    `, {
+                        bind: [
+                            asicExtractId,
+                            shareholder.name,
+                            shareholder.acn,
+                            shareholder.class,
+                            shareholder.number_held,
+                            shareholder.percentage_held,
+                            shareholder.document_number,
+                            shareholder.beneficially_owned,
+                            shareholder.fully_paid,
+                            shareholder.jointly_held,
+                            shareholder.status,
+                            shareholder.address ? JSON.stringify(shareholder.address) : null
+                        ]
+                    });
+                }
+                console.log('✅ Shareholders stored');
+            }
+            
+            // 6. Store Share Structures
+            if (asicExtract.share_structures && Array.isArray(asicExtract.share_structures)) {
+                for (const shareStructure of asicExtract.share_structures) {
+                    await sequelize.query(`
+                        INSERT INTO share_structures (
+                            asic_extract_id, class_code, class_description, status, 
+                            share_count, amount_paid, amount_due, document_number
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8
+                        )
+                    `, {
+                        bind: [
+                            asicExtractId,
+                            shareStructure.class_code,
+                            shareStructure.class_description,
+                            shareStructure.status,
+                            shareStructure.share_count,
+                            shareStructure.amount_paid,
+                            shareStructure.amount_due,
+                            shareStructure.document_number
+                        ]
+                    });
+                }
+                console.log('✅ Share Structures stored');
+            }
+            
+            // 7. Store Documents
+            if (asicExtract.documents && Array.isArray(asicExtract.documents)) {
+                for (const document of asicExtract.documents) {
+                    await sequelize.query(`
+                        INSERT INTO documents (
+                            asic_extract_id, type, description, document_number, 
+                            form_code, page_count, effective_at, processed_at, received_at
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9
+                        )
+                    `, {
+                        bind: [
+                            asicExtractId,
+                            document.type,
+                            document.description,
+                            document.document_number,
+                            document.form_code,
+                            document.page_count,
+                            document.effective_at,
+                            document.processed_at,
+                            document.received_at
+                        ]
+                    });
+                }
+                console.log('✅ Documents stored');
+            }
+        }
+        
+        // 8. Store Tax Debts
+        if (reportData.tax_debt && Array.isArray(reportData.tax_debt)) {
+            for (const taxDebt of reportData.tax_debt) {
+                await sequelize.query(`
+                    INSERT INTO tax_debts (
+                        report_id, date, amount, status, ato_added_at, ato_updated_at
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6
+                    )
+                `, {
+                    bind: [
+                        reportId,
+                        taxDebt.date,
+                        taxDebt.amount,
+                        taxDebt.status,
+                        taxDebt.ato_added_at,
+                        taxDebt.ato_updated_at
+                    ]
+                });
+            }
+            console.log('✅ Tax Debts stored');
+        }
+        
+        // 9. Store Cases
+        if (reportData.cases && typeof reportData.cases === 'object') {
+            for (const [caseUuid, caseData] of Object.entries(reportData.cases)) {
+                const [caseResult] = await sequelize.query(`
+                    INSERT INTO cases (
+                        report_id, type, notification_time, court_name, state, court_type, 
+                        case_type, case_number, jurisdiction, suburb, next_hearing_date, 
+                        case_name, total_parties, total_documents, total_hearings, 
+                        timezone, internal_reference, name, other_names, insolvency_risk_factor, 
+                        party_role, most_recent_event, match_on
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+                    ) RETURNING case_id
+                `, {
+                    bind: [
+                        reportId,
+                        caseData.type,
+                        caseData.notification_time,
+                        caseData.court_name,
+                        caseData.state,
+                        caseData.court_type,
+                        caseData.case_type,
+                        caseData.case_number,
+                        caseData.jurisdiction,
+                        caseData.suburb,
+                        caseData.next_hearing_date,
+                        caseData.case_name,
+                        caseData.total_parties,
+                        caseData.total_documents,
+                        caseData.total_hearings,
+                        caseData.timezone,
+                        caseData.internal_reference,
+                        caseData.name,
+                        caseData.other_names,
+                        caseData.insolvency_risk_factor,
+                        caseData.party_role,
+                        caseData.most_recent_event,
+                        caseData.match_on
+                    ]
+                });
+                
+                const caseId = caseResult[0].case_id;
+                
+                // Store Case Parties
+                if (caseData.parties && Array.isArray(caseData.parties)) {
+                    for (const party of caseData.parties) {
+                        await sequelize.query(`
+                            INSERT INTO case_parties (
+                                case_id, name, type, role, offence, plea, representative_firm, 
+                                representative_name, address, phone, fax, abn, acn
+                            ) VALUES (
+                                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
+                            )
+                        `, {
+                            bind: [
+                                caseId,
+                                party.name,
+                                party.type,
+                                party.role,
+                                party.offence,
+                                party.plea,
+                                party.representative_firm,
+                                party.representative_name,
+                                party.address,
+                                party.phone,
+                                party.fax,
+                                party.abn,
+                                party.acn
+                            ]
+                        });
+                    }
+                }
+                
+                // Store Case Hearings
+                if (caseData.hearings && Array.isArray(caseData.hearings)) {
+                    for (const hearing of caseData.hearings) {
+                        await sequelize.query(`
+                            INSERT INTO case_hearings (
+                                case_id, datetime, officer, court_room, court_name, court_phone, 
+                                court_address, court_suburb, type, list_no, outcome
+                            ) VALUES (
+                                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+                            )
+                        `, {
+                            bind: [
+                                caseId,
+                                hearing.datetime,
+                                hearing.officer,
+                                hearing.court_room,
+                                hearing.court_name,
+                                hearing.court_phone,
+                                hearing.court_address,
+                                hearing.court_suburb,
+                                hearing.type,
+                                hearing.list_no,
+                                hearing.outcome
+                            ]
+                        });
+                    }
+                }
+                
+                // Store Case Documents
+                if (caseData.documents && Array.isArray(caseData.documents)) {
+                    for (const document of caseData.documents) {
+                        await sequelize.query(`
+                            INSERT INTO case_documents (
+                                case_id, datetime, title, description, filed_by
+                            ) VALUES (
+                                $1, $2, $3, $4, $5
+                            )
+                        `, {
+                            bind: [
+                                caseId,
+                                document.datetime,
+                                document.title,
+                                document.description,
+                                document.filed_by
+                            ]
+                        });
+                    }
+                }
+                
+                // Store Case Applications
+                if (caseData.applications && Array.isArray(caseData.applications)) {
+                    for (const application of caseData.applications) {
+                        await sequelize.query(`
+                            INSERT INTO case_applications (
+                                case_id, title, type, status, date_filed, date_finalised
+                            ) VALUES (
+                                $1, $2, $3, $4, $5, $6
+                            )
+                        `, {
+                            bind: [
+                                caseId,
+                                application.title,
+                                application.type,
+                                application.status,
+                                application.date_filed,
+                                application.date_finalised
+                            ]
+                        });
+                    }
+                }
+                
+                // Store Case Judgments
+                if (caseData.judgments && Array.isArray(caseData.judgments)) {
+                    for (const judgment of caseData.judgments) {
+                        await sequelize.query(`
+                            INSERT INTO case_judgments (
+                                case_id, uuid, unique_id, number, case_number, title, date, url, 
+                                state, court, court_type, location, officer, case_type, catchwords, 
+                                legislation, cases_cited, result, division, registry, national_practice_area, 
+                                sub_area, category, number_of_paragraphs, date_of_last_submission, 
+                                orders, reasons_for_judgment, prior_decisions
+                            ) VALUES (
+                                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 
+                                $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+                            )
+                        `, {
+                            bind: [
+                                caseId,
+                                judgment.uuid,
+                                judgment.unique_id,
+                                judgment.number,
+                                judgment.case_number,
+                                judgment.title,
+                                judgment.date,
+                                judgment.url,
+                                judgment.state,
+                                judgment.court,
+                                judgment.court_type,
+                                judgment.location,
+                                judgment.officer,
+                                judgment.case_type,
+                                judgment.catchwords,
+                                judgment.legislation,
+                                judgment.cases_cited,
+                                judgment.result,
+                                judgment.division,
+                                judgment.registry,
+                                judgment.national_practice_area,
+                                judgment.sub_area,
+                                judgment.category,
+                                judgment.number_of_paragraphs,
+                                judgment.date_of_last_submission,
+                                judgment.orders,
+                                judgment.reasons_for_judgment,
+                                JSON.stringify(judgment.prior_decisions || [])
+                            ]
+                        });
+                    }
+                }
+            }
+            console.log('✅ Cases and related data stored');
+        }
+        
+        // 10. Store Insolvencies
+        if (reportData.insolvencies && typeof reportData.insolvencies === 'object') {
+            for (const [insolvencyUuid, insolvencyData] of Object.entries(reportData.insolvencies)) {
+                const [insolvencyResult] = await sequelize.query(`
+                    INSERT INTO insolvencies (
+                        report_id, uuid, type, notification_time, court_name, case_type, 
+                        case_number, asic_notice_id, case_name, total_parties, 
+                        internal_reference, name, other_names, insolvency_risk_factor, match_on
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+                    ) RETURNING insolvency_id
+                `, {
+                    bind: [
+                        reportId,
+                        insolvencyData.uuid,
+                        insolvencyData.type,
+                        insolvencyData.notification_time,
+                        insolvencyData.court_name,
+                        insolvencyData.case_type,
+                        insolvencyData.case_number,
+                        insolvencyData.asic_notice_id,
+                        insolvencyData.case_name,
+                        insolvencyData.total_parties,
+                        insolvencyData.internal_reference,
+                        insolvencyData.name,
+                        insolvencyData.other_names,
+                        insolvencyData.insolvency_risk_factor,
+                        insolvencyData.match_on
+                    ]
+                });
+                
+                const insolvencyId = insolvencyResult[0].insolvency_id;
+                
+                // Store Insolvency Parties
+                if (insolvencyData.parties && Array.isArray(insolvencyData.parties)) {
+                    for (const party of insolvencyData.parties) {
+                        await sequelize.query(`
+                            INSERT INTO insolvency_parties (
+                                insolvency_id, name, acn, url
+                            ) VALUES (
+                                $1, $2, $3, $4
+                            )
+                        `, {
+                            bind: [
+                                insolvencyId,
+                                party.name,
+                                party.acn,
+                                party.url
+                            ]
+                        });
+                    }
+                }
+            }
+            console.log('✅ Insolvencies and related data stored');
+        }
+        
+        console.log('🎉 All report data parsed and stored successfully!');
+        
+    } catch (error) {
+        console.error('❌ Error parsing and storing report data:', error);
+        throw error;
+    }
+}
+
 // Function to create report via external API
 async function createReport({ business, asicType, userId, paymentIntentId }) {
     try {
@@ -167,17 +663,14 @@ async function createReport({ business, asicType, userId, paymentIntentId }) {
         const savedReport = await Report.create({
             uuid: createResponse.data.uuid,
             abn: abn,
-            userId: userId,
-            paymentIntentId: paymentIntentId,
-            asicType: asicType,
-            reportData: reportData // Keep JSONB for backup
+            asicType: asicType
         });
         
         console.log('Report data saved to database:', savedReport.reportId);
         
         // Parse and store structured data in separate tables
         try {
-            await ReportParser.parseAndStoreReportData(savedReport.reportId, reportData);
+            await parseAndStoreReportData(savedReport.reportId, reportData);
             console.log('Structured report data stored successfully');
         } catch (parseError) {
             console.error('Error storing structured data:', parseError);
@@ -190,7 +683,6 @@ async function createReport({ business, asicType, userId, paymentIntentId }) {
             reportId: createResponse.data.report_id,
             uuid: createResponse.data.uuid,
             status: createResponse.status,
-            data: reportData,
             fromCache: false,
             savedReportId: savedReport.reportId
         };

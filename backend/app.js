@@ -26,8 +26,9 @@ app.use(helmet({
 }));
 
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || ['http://localhost:5176', 'https://credion-1.onrender.com'],
-  credentials: true
+  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  credentials: true,
+  exposedHeaders: ['Content-Disposition']
 }));
 
 app.use(morgan('dev'));
@@ -49,7 +50,11 @@ app.use(session({
 // Static files
 app.use(express.static(path.join(__dirname, '../public')));
 
-// API Routes
+// View engine setup
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, '../views'));
+
+// Routes
 app.get('/', (req, res) => {
   res.json({ 
     message: 'Credion API Server',
@@ -63,38 +68,63 @@ app.get('/', (req, res) => {
 // POST /payment-methods - Add new payment method
 app.post('/payment-methods', async (req, res) => {
   try {
-    const { cardNumber, expiryDate, cvv, cardholderName, isDefault, userId } = req.body;
+    const { stripePaymentMethodId, cardholderName, userId, isDefault } = req.body;
 
     // Basic validation
-    if (!cardNumber || !expiryDate || !cvv || !cardholderName || !userId) {
+    if (!stripePaymentMethodId || !cardholderName || !userId) {
       return res.status(400).json({
         error: 'VALIDATION_ERROR',
-        message: 'All fields are required'
+        message: 'Stripe payment method ID, cardholder name, and user ID are required'
       });
     }
 
-    // For development/testing, we'll simulate Stripe payment method creation
-    // In production, you'd use Stripe Elements on the frontend for security
-    const [month, year] = expiryDate.split('/');
-    
     try {
-      // Simulate successful payment method creation for testing
-      const simulatedPaymentMethod = {
-        id: `pm_test_${Date.now()}`,
-        last4: cardNumber.slice(-4),
-        brand: cardNumber.startsWith('4') ? 'visa' : 'mastercard',
-        expiryMonth: parseInt(month),
-        expiryYear: parseInt(`20${year}`),
-        cardholderName,
-        isDefault: isDefault || false
-      };
+      // Retrieve the payment method from Stripe to get card details
+      const paymentMethod = await stripe.paymentMethods.retrieve(stripePaymentMethodId);
+      
+      if (!paymentMethod || !paymentMethod.card) {
+        return res.status(400).json({
+          error: 'PAYMENT_ERROR',
+          message: 'Invalid payment method'
+        });
+      }
 
-      // TODO: Save to database using Sequelize models
-      // For now, return success response
+      // Save to database
+      const newPaymentMethod = await UserPaymentMethod.create({
+        userId: userId,
+        stripePaymentMethodId: paymentMethod.id,
+        cardBrand: paymentMethod.card.brand,
+        cardLast4: paymentMethod.card.last4,
+        cardExpMonth: paymentMethod.card.exp_month,
+        cardExpYear: paymentMethod.card.exp_year,
+        isDefault: isDefault || false,
+        isActive: true
+      });
+
+      // If this is the first payment method or marked as default, set it as default
+      if (isDefault || !await UserPaymentMethod.findOne({ where: { userId, isDefault: true } })) {
+        await UserPaymentMethod.update(
+          { isDefault: false },
+          { where: { userId } }
+        );
+        await UserPaymentMethod.update(
+          { isDefault: true },
+          { where: { paymentMethodId: newPaymentMethod.paymentMethodId } }
+        );
+      }
+
       res.status(201).json({
         success: true,
         message: 'Payment method added successfully',
-        paymentMethod: simulatedPaymentMethod
+        paymentMethod: {
+          id: paymentMethod.id,
+          last4: paymentMethod.card.last4,
+          brand: paymentMethod.card.brand,
+          expiryMonth: paymentMethod.card.exp_month,
+          expiryYear: paymentMethod.card.exp_year,
+          cardholderName,
+          isDefault: isDefault || false
+        }
       });
 
     } catch (error) {
@@ -225,24 +255,40 @@ app.delete('/payment-methods/:id', async (req, res) => {
       });
     }
 
-    // Soft delete from database (set is_active = false)
-    const [updatedRows] = await UserPaymentMethod.update(
-      { isActive: false },
-      { 
-        where: { 
-          stripePaymentMethodId: id,
-          userId: userId 
-        },
-        returning: true
+    // Find the payment method first
+    const paymentMethod = await UserPaymentMethod.findOne({
+      where: { 
+        stripePaymentMethodId: id,
+        userId: userId,
+        isActive: true
       }
-    );
+    });
 
-    if (updatedRows === 0) {
+    if (!paymentMethod) {
       return res.status(404).json({
         error: 'NOT_FOUND',
         message: 'Payment method not found'
       });
     }
+
+    // Detach payment method from Stripe (this removes it from customer)
+    try {
+      await stripe.paymentMethods.detach(id);
+    } catch (stripeError) {
+      console.error('Stripe detach error:', stripeError);
+      // Continue with database deletion even if Stripe fails
+    }
+
+    // Soft delete from database (set is_active = false)
+    await UserPaymentMethod.update(
+      { isActive: false },
+      { 
+        where: { 
+          stripePaymentMethodId: id,
+          userId: userId 
+        }
+      }
+    );
 
     res.json({
       success: true,
@@ -258,12 +304,96 @@ app.delete('/payment-methods/:id', async (req, res) => {
   }
 });
 
+// Reports API Routes
+// GET /reports - Get all reports
+app.get('/reports', async (req, res) => {
+  try {
+    try {
+      const reports = await Report.findAll({
+        order: [['reportId', 'DESC']]
+      });
+
+      const formattedReports = reports.map(report => ({
+        id: report.reportId,
+        uuid: report.uuid,
+        abn: report.abn,
+        asicType: report.asicType
+      }));
+
+      res.json({
+        success: true,
+        reports: formattedReports
+      });
+
+    } catch (error) {
+      console.error('Get reports error:', error);
+      res.status(500).json({
+        error: 'DATABASE_ERROR',
+        message: 'Failed to retrieve reports'
+      });
+    }
+
+  } catch (error) {
+    console.error('Get reports error:', error);
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'An error occurred while retrieving reports'
+    });
+  }
+});
+
+// GET /reports/:id - Get specific report details
+app.get('/reports/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    try {
+      const report = await Report.findOne({
+        where: { 
+          reportId: id
+        }
+      });
+
+      if (!report) {
+        return res.status(404).json({
+          error: 'NOT_FOUND',
+          message: 'Report not found'
+        });
+      }
+
+      res.json({
+        success: true,
+        report: {
+          id: report.reportId,
+          uuid: report.uuid,
+          abn: report.abn,
+          asicType: report.asicType
+        }
+      });
+
+    } catch (error) {
+      console.error('Get report details error:', error);
+      res.status(500).json({
+        error: 'DATABASE_ERROR',
+        message: 'Failed to retrieve report details'
+      });
+    }
+
+  } catch (error) {
+    console.error('Get report details error:', error);
+    res.status(500).json({
+      error: 'INTERNAL_ERROR',
+      message: 'An error occurred while retrieving report details'
+    });
+  }
+});
+
 // Authentication Routes (PostgreSQL)
 const authRoutes = require('./routes/auth.postgres');
 app.use('/auth', authRoutes);
 
 // Import models for search route
-const { User, UserPaymentMethod } = require('./models');
+const { User, UserPaymentMethod, Report } = require('./models');
 
 // Card Details route (requires authentication)
 app.get('/card-details', async (req, res) => {
@@ -282,8 +412,8 @@ app.get('/card-details', async (req, res) => {
       return res.redirect('/auth/login');
     }
     
-    res.json({ 
-      message: 'Payment method page data',
+    res.render('card-details', { 
+      title: 'Add Payment Method - Credion',
       userId: user.userId,
       userEmail: user.email,
       firstName: user.firstName,
@@ -314,8 +444,8 @@ app.get('/payment-methods', async (req, res) => {
       return res.redirect('/auth/login');
     }
     
-    res.json({ 
-      message: 'Payment methods page data',
+    res.render('payment-methods', { 
+      title: 'Payment Methods - Credion',
       userId: user.userId,
       userEmail: user.email,
       firstName: user.firstName,
@@ -346,8 +476,8 @@ app.get('/search', async (req, res) => {
       return res.redirect('/auth/login');
     }
     
-    res.json({ 
-      message: 'Search page data',
+    res.render('search', { 
+      title: 'Search - Credion',
       user: {
         userId: user.userId,
         firstName: user.firstName,
@@ -370,12 +500,84 @@ app.use('/api/payment', paymentRoutes);
 const apiRoutes = require('./routes/api.routes');
 app.use('/api', apiRoutes);
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    message: 'Server is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// PDF Generation endpoint
+const pdfGenerator = require('./services/pdfGenerator');
+
+       app.post('/api/generate-pdf', async (req, res) => {
+         try {
+           const { reportId, reportType } = req.body;
+
+           if (!reportId || !reportType) {
+             return res.status(400).json({
+               error: 'MISSING_PARAMETERS',
+               message: 'reportId and reportType are required'
+             });
+           }
+
+           // Only allow ASIC reports for now
+           if (reportType !== 'ASIC') {
+             return res.status(400).json({
+               error: 'INVALID_REPORT_TYPE',
+               message: 'Only ASIC reports are currently supported'
+             });
+           }
+
+           // Get report data from database
+           const Report = require('./models/Report');
+           const report = await Report.findOne({
+             where: { reportId: reportId }
+           });
+
+           if (!report) {
+             return res.status(404).json({
+               error: 'REPORT_NOT_FOUND',
+               message: 'Report not found'
+             });
+           }
+
+           // Generate report data
+           const reportData = await pdfGenerator.generateReportData(report, reportType);
+
+           // Generate PDF
+           const pdfBuffer = await pdfGenerator.generatePDF('asic-report', reportData);
+
+           // Generate filename in format: ABN_NAME_ASIC_Current or ABN_NAME_ASIC_Historical
+           const companyName = reportData.companyName || 'Unknown';
+           const abn = reportData.abn || 'Unknown';
+           const reportTypeFormatted = reportType === 'ASIC' ? 'Current' : 'Historical';
+           const filename = `${abn}_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_ASIC_${reportTypeFormatted}.pdf`;
+
+           // Set response headers for PDF download
+           res.setHeader('Content-Type', 'application/pdf');
+           res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+           res.setHeader('Content-Length', pdfBuffer.length);
+
+           // Send PDF as binary data
+           res.end(pdfBuffer, 'binary');
+
+         } catch (error) {
+           console.error('PDF generation error:', error);
+           res.status(500).json({
+             error: 'PDF_GENERATION_FAILED',
+             message: 'Failed to generate PDF'
+           });
+         }
+       });
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ 
-    error: 'Not Found',
-    message: 'API endpoint not found',
-    path: req.path
+    error: 'NOT_FOUND',
+    message: 'API endpoint not found' 
   });
 });
 
@@ -389,21 +591,12 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`🚀 Credion server is running on http://0.0.0.0:${PORT}`);
+app.listen(PORT, async () => {
+  console.log(`🚀 Credion server is running on http://localhost:${PORT}`);
   console.log(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔧 PORT from environment: ${process.env.PORT}`);
-  console.log(`🔧 DB_HOST: ${process.env.DB_HOST}`);
-  console.log(`🔧 DB_PORT: ${process.env.DB_PORT}`);
-  console.log(`🔧 DB_NAME: ${process.env.DB_NAME}`);
   
-  // Test database connection (optional)
-  try {
-    await testConnection();
-  } catch (error) {
-    console.log('⚠️  Database connection failed, but server will continue running');
-    console.log('💡 Set up database environment variables to enable database features');
-  }
+  // Test database connection
+  await testConnection();
 });
 
 module.exports = app;

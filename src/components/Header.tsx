@@ -25,6 +25,7 @@ const Header = () => {
     if (userData) {
       setUser(JSON.parse(userData));
     }
+  
   }, [location.pathname]); // Re-check when route changes
 
   const handleLogout = async () => {
@@ -89,14 +90,17 @@ const Header = () => {
           <div className="hidden md:flex items-center space-x-4">
             {user ? (
               <div className="flex items-center space-x-4">
-                <Link
-                  to="/profile"
-                  className="flex items-center hover:opacity-80 transition-opacity cursor-pointer"
+                <button
+                  onClick={() => navigate('/user-profile')}
+                  className="flex items-center space-x-2 hover:bg-gray-100 rounded-lg px-2 py-1 transition-colors duration-200"
                 >
                   <div className="w-8 h-8 bg-credion-red rounded-full flex items-center justify-center">
                     <User className="text-white" size={16} />
                   </div>
-                </Link>
+                  <span className="text-sm font-medium text-credion-charcoal">
+                    {user.firstName}
+                  </span>
+                </button>
                 <button
                   onClick={handleLogout}
                   className="flex items-center space-x-1 text-sm font-medium text-credion-charcoal hover:text-credion-red transition-colors duration-200"
@@ -153,15 +157,20 @@ const Header = () => {
               <div className="px-4 py-2 space-y-2">
                 {user ? (
                   <div className="space-y-2">
-                    <Link
-                      to="/profile"
-                      onClick={() => setIsMobileMenuOpen(false)}
-                      className="flex items-center py-2 hover:bg-gray-50 rounded-lg px-2 transition-colors"
+                    <button
+                      onClick={() => {
+                        navigate('/user-profile');
+                        setIsMobileMenuOpen(false);
+                      }}
+                      className="flex items-center space-x-2 py-2 w-full text-left hover:bg-gray-100 rounded-lg px-2 transition-colors duration-200"
                     >
                       <div className="w-8 h-8 bg-credion-red rounded-full flex items-center justify-center">
                         <User className="text-white" size={16} />
                       </div>
-                    </Link>
+                      <span className="text-sm font-medium text-credion-charcoal">
+                        {user.firstName}
+                      </span>
+                    </button>
                     <button
                       onClick={() => {
                         handleLogout();

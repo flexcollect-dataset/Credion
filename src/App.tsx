@@ -15,6 +15,7 @@ import PaymentMethod from './pages/PaymentMethod';
 import PaymentMethods from './pages/PaymentMethods';
 import Profile from './pages/Profile';
 import Government from './pages/Government';
+import UserProfile from './pages/UserProfile';
 
 function App() {
   return (
@@ -37,6 +38,7 @@ function App() {
             <Route path="/payment-method" element={<PaymentMethod />} />
             <Route path="/payment-methods" element={<PaymentMethods />} />
             <Route path="/government" element={<Government />} />
+            <Route path="/user-profile" element={<UserProfile />} />
           </Routes>
         </main>
         <Footer />

@@ -20,6 +20,8 @@ const CaseApplication = require('./CaseApplication');
 const CaseJudgment = require('./CaseJudgment');
 const Insolvency = require('./Insolvency');
 const InsolvencyParty = require('./InsolvencyParty');
+const Licence = require('./Licence');
+const AsicDocument = require('./AsicDocument');
 
 // Define associations
 User.hasMany(UserPaymentMethod, { 
@@ -32,9 +34,7 @@ UserPaymentMethod.belongsTo(User, {
     as: 'user' 
 });
 
-// Report associations
-User.hasMany(Report, { foreignKey: 'user_id', as: 'reports', onDelete: 'CASCADE'});
-Report.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+// Report associations (removed user_id foreign key)
 
 Report.hasOne(Entity, { foreignKey: 'report_id', as: 'entity', onDelete: 'CASCADE'});
 Entity.belongsTo(Report, { foreignKey: 'report_id', as: 'report' });
@@ -87,6 +87,13 @@ Insolvency.belongsTo(Report, { foreignKey: 'report_id', as: 'report' });
 Insolvency.hasMany(InsolvencyParty, { foreignKey: 'insolvency_id', as: 'parties', onDelete: 'CASCADE'});
 InsolvencyParty.belongsTo(Insolvency, { foreignKey: 'insolvency_id', as: 'insolvency' });
 
+// Licence and AsicDocument associations
+Report.hasMany(Licence, { foreignKey: 'report_id', as: 'licences', onDelete: 'CASCADE'});
+Licence.belongsTo(Report, { foreignKey: 'report_id', as: 'report' });
+
+Report.hasMany(AsicDocument, { foreignKey: 'report_id', as: 'asicDocuments', onDelete: 'CASCADE'});
+AsicDocument.belongsTo(Report, { foreignKey: 'report_id', as: 'report' });
+
 // Export all models
 module.exports = {
     sequelize,
@@ -110,6 +117,8 @@ module.exports = {
     CaseApplication,
     CaseJudgment,
     Insolvency,
-    InsolvencyParty
+    InsolvencyParty,
+    Licence,
+    AsicDocument
 };
 
