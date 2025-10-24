@@ -32,4 +32,3 @@ router.get('/health', (req, res) => {
 // router.use('/users', require('./users.routes'));
 
 module.exports = router;
-

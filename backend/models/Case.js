@@ -17,11 +17,6 @@ const Case = sequelize.define('Case', {
             key: 'report_id'
         }
     },
-    uuid: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        field: 'uuid'
-    },
     type: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -76,11 +71,6 @@ const Case = sequelize.define('Case', {
         type: DataTypes.TEXT,
         allowNull: true,
         field: 'case_name'
-    },
-    url: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        field: 'url'
     },
     totalParties: {
         type: DataTypes.INTEGER,
@@ -144,9 +134,6 @@ const Case = sequelize.define('Case', {
     indexes: [
         {
             fields: ['report_id']
-        },
-        {
-            fields: ['uuid']
         },
         {
             fields: ['case_number']

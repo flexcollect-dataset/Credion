@@ -50,9 +50,13 @@ class ApiService {
   ): Promise<T> {
     const url = `${this.baseURL}${endpoint}`;
     
+    // Get auth token from localStorage
+    const token = localStorage.getItem('accessToken');
+    
     const config: RequestInit = {
       headers: {
         'Content-Type': 'application/json',
+        ...(token && { 'Authorization': `Bearer ${token}` }),
         ...options.headers,
       },
       credentials: 'include', // Include cookies for session management
@@ -126,38 +130,7 @@ class ApiService {
     return this.request<{ status: string; message: string; timestamp: string }>('/health');
   }
 
-  // Payment Methods
-  async addPaymentMethod(paymentData: {
-    cardNumber: string;
-    expiryDate: string;
-    cvv: string;
-    cardholderName: string;
-    isDefault: boolean;
-    userId: number;
-  }): Promise<{ success: boolean; message: string; paymentMethod: any }> {
-    return this.request<{ success: boolean; message: string; paymentMethod: any }>('/payment-methods', {
-      method: 'POST',
-      body: JSON.stringify(paymentData),
-    });
-  }
 
-  async getPaymentMethods(userId: number): Promise<{ success: boolean; paymentMethods: any[] }> {
-    return this.request<{ success: boolean; paymentMethods: any[] }>(`/payment-methods?userId=${userId}`);
-  }
-
-  async setDefaultPaymentMethod(paymentMethodId: string, userId: number): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(`/payment-methods/${paymentMethodId}/set-default`, {
-      method: 'PUT',
-      body: JSON.stringify({ userId }),
-    });
-  }
-
-  async deletePaymentMethod(paymentMethodId: string, userId: number): Promise<{ success: boolean; message: string }> {
-    return this.request<{ success: boolean; message: string }>(`/payment-methods/${paymentMethodId}`, {
-      method: 'DELETE',
-      body: JSON.stringify({ userId }),
-    });
-  }
 
   // Search functionality - Direct call to Australian Business Register API
   async searchABNByName(searchTerm: string): Promise<{ success: boolean; results: any[] }> {
@@ -193,6 +166,120 @@ class ApiService {
         success: false,
         results: []
       };
+    }
+  }
+
+  // Payment Methods API
+  async getPaymentMethods() {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const response = await this.request<{ paymentMethods: any[] }>(`/payment-methods?userId=${user.userId}`, {
+        method: 'GET'
+      });
+      return response.paymentMethods || [];
+    } catch (error) {
+      console.error('Error fetching payment methods:', error);
+      return [];
+    }
+  }
+
+  async addPaymentMethod(paymentMethod: any) {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const paymentData = {
+        ...paymentMethod,
+        userId: user.userId
+      };
+      const response = await this.request('/payment-methods', {
+        method: 'POST',
+        body: JSON.stringify(paymentData)
+      });
+      return response;
+    } catch (error) {
+      console.error('Error adding payment method:', error);
+      throw error;
+    }
+  }
+
+  async deletePaymentMethod(id: number) {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const response = await this.request(`/payment-methods/${id}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ userId: user.userId })
+      });
+      return response;
+    } catch (error) {
+      console.error('Error deleting payment method:', error);
+      throw error;
+    }
+  }
+
+  async setDefaultPaymentMethod(id: number) {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      const response = await this.request(`/payment-methods/${id}/set-default`, {
+        method: 'PUT',
+        body: JSON.stringify({ userId: user.userId })
+      });
+      return response;
+    } catch (error) {
+      console.error('Error setting default payment method:', error);
+      throw error;
+    }
+  }
+
+  // Reports API
+  async getReports(): Promise<any[]> {
+    return this.request(`/reports`);
+  }
+
+  async getReportDetails(reportId: number): Promise<any> {
+    return this.request(`/reports/${reportId}`);
+  }
+
+  // PDF Generation API
+  async generatePDF(reportId: number, reportType: string): Promise<{ blob: Blob; filename: string }> {
+    try {
+      const response = await fetch(`${this.baseURL}/api/generate-pdf`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+        },
+        body: JSON.stringify({ reportId, reportType })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to generate PDF');
+      }
+
+      // Extract filename from Content-Disposition header
+      const contentDisposition = response.headers.get('Content-Disposition');
+      let filename = `${reportType.toLowerCase()}-report-${reportId}.pdf`; // fallback
+      
+      console.log('🔍 Content-Disposition header:', contentDisposition);
+      
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="([^"]+)"/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+          console.log('✅ Extracted filename from header:', filename);
+        } else {
+          console.log('❌ Could not extract filename from header');
+        }
+      } else {
+        console.log('❌ No Content-Disposition header found');
+      }
+      
+      console.log('📄 Final filename being used:', filename);
+
+      const blob = await response.blob();
+      return { blob, filename };
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      throw error;
     }
   }
 }

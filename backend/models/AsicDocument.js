@@ -1,39 +1,36 @@
 const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
 
-const AsicExtract = sequelize.define('AsicExtract', {
-    asicExtractId: {
+const AsicDocument = sequelize.define('AsicDocument', {
+    asicDocumentId: {
         type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true,
-        field: 'asic_extract_id'
+        field: 'asic_document_id'
     },
     reportId: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         field: 'report_id',
         references: {
             model: 'reports',
             key: 'report_id'
         }
     },
-    externalId: {
-        type: DataTypes.STRING,
+    documentData: {
+        type: DataTypes.JSONB,
         allowNull: true,
-        field: 'external_id'
-    },
+        field: 'document_data'
+    }
 }, {
-    tableName: 'asic_extracts',
+    tableName: 'asic_documents',
     timestamps: false,
     underscored: true,
     indexes: [
         {
             fields: ['report_id']
-        },
-        {
-            fields: ['external_id']
         }
     ]
 });
 
-module.exports = AsicExtract;
+module.exports = AsicDocument;

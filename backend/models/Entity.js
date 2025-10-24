@@ -87,11 +87,6 @@ const Entity = sequelize.define('Entity', {
         allowNull: true,
         field: 'reference'
     },
-    irf: {
-        type: DataTypes.DECIMAL(10, 2),
-        allowNull: true,
-        field: 'irf'
-    },
     reviewDate: {
         type: DataTypes.DATE,
         allowNull: true,
@@ -127,11 +122,6 @@ const Entity = sequelize.define('Entity', {
         allowNull: true,
         field: 'organisation_sub_class'
     },
-    entityCreatedAt: {
-        type: DataTypes.DATE,
-        allowNull: true,
-        field: 'entity_created_at'
-    }
 }, {
     tableName: 'entities',
     timestamps: false,
