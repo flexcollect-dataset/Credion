@@ -112,67 +112,158 @@ class PDFGenerator {
                 });
             }
 
-            // Get ASIC extract first to get the asic_extract_id
-            const [asicExtracts] = await sequelize.query(`
-                SELECT * FROM asic_extracts 
-                WHERE report_id = ${reportId}
-                LIMIT 1
-            `);
-            
-            const asicExtractId = asicExtracts[0]?.asic_extract_id;
-            console.log('🔍 ASIC Extract ID:', asicExtractId);
-            
-            // Get addresses using the correct asic_extract_id
-            const [addresses] = await sequelize.query(`
-                SELECT * FROM addresses 
-                WHERE asic_extract_id = '${asicExtractId}'
-                ORDER BY start_date DESC
-            `);
+            // Set entity early so we can use it even if other queries fail
+            const entity = entities[0] || {};
 
-            // Get contact addresses (handle missing table gracefully)
-            let contactAddresses = [];
+            // Get ASIC extract first to get the asic_extract_id
+            let asicExtractId = null;
             try {
-                const [contactAddressesResult] = await sequelize.query(`
-                    SELECT * FROM contact_addresses 
-                    WHERE asic_extract_id = '${asicExtractId}'
-                    ORDER BY start_date DESC
+                const [asicExtracts] = await sequelize.query(`
+                    SELECT * FROM asic_extracts 
+                    WHERE report_id = ${reportId}
+                    LIMIT 1
                 `);
-                contactAddresses = contactAddressesResult;
+                
+                asicExtractId = asicExtracts[0]?.asic_extract_id;
+                console.log('🔍 ASIC Extract ID:', asicExtractId);
             } catch (error) {
-                console.log('⚠️ contact_addresses table does not exist, using empty array');
-                contactAddresses = [];
+                console.log('⚠️ asic_extracts table error:', error.message);
+                asicExtractId = null;
+            }
+            
+            // Get ALL addresses from the addresses table using asic_extract_id
+            let addresses = [];
+            let contactAddresses = [];
+            let allAddresses = []; // Keep all addresses for personnel matching
+            if (asicExtractId) {
+                try {
+                    const [addressesResult] = await sequelize.query(`
+                        SELECT * FROM addresses 
+                        WHERE asic_extract_id = ${asicExtractId}
+                        ORDER BY start_date DESC
+                    `);
+                    
+                    // Keep all addresses for personnel matching
+                    allAddresses = addressesResult;
+                    
+                    // Split addresses by address_category field
+                    // Only include company addresses (not director, secretary, shareholder)
+                    addresses = addressesResult.filter(addr => 
+                        addr.address_category !== 'contact' && 
+                        addr.address_category !== 'director' && 
+                        addr.address_category !== 'secretary' && 
+                        addr.address_category !== 'shareholder'
+                    );
+                    contactAddresses = addressesResult.filter(addr => addr.address_category === 'contact');
+                    
+                    console.log('🔍 Addresses found:', addresses.length);
+                    console.log('🔍 Contact addresses found:', contactAddresses.length);
+                } catch (error) {
+                    console.log('⚠️ addresses table error, using empty arrays:', error.message);
+                    addresses = [];
+                    contactAddresses = [];
+                    allAddresses = [];
+                }
+            } else {
+                console.log('⚠️ No ASIC extract ID found, using empty address arrays');
             }
 
-            // Get directors
-            const [directors] = await sequelize.query(`
-                SELECT * FROM directors 
-                WHERE asic_extract_id = '${asicExtractId}'
-                AND status = 'Current'
-                ORDER BY start_date DESC
-            `);
+            // Get directors using asic_extract_id (exclude secretaries)
+            let directors = [];
+            if (asicExtractId) {
+                try {
+                    const [directorsResult] = await sequelize.query(`
+                        SELECT * FROM directors 
+                        WHERE asic_extract_id = ${asicExtractId}
+                        AND status = 'Current'
+                        AND type = 'Director'
+                        ORDER BY start_date DESC
+                    `);
+                    directors = directorsResult;
+                    console.log('🔍 Directors found:', directors.length);
+                } catch (error) {
+                    console.log('⚠️ directors table error, using empty array:', error.message);
+                    directors = [];
+                }
+            } else {
+                console.log('⚠️ No ASIC extract ID found, using empty directors array');
+            }
 
-            // Get shareholders
-            const [shareholders] = await sequelize.query(`
-                SELECT * FROM shareholders 
-                WHERE asic_extract_id = '${asicExtractId}'
-                AND status = 'Current'
-                ORDER BY number_held DESC
-            `);
+            // Get shareholders using asic_extract_id
+            let shareholders = [];
+            if (asicExtractId) {
+                try {
+                    const [shareholdersResult] = await sequelize.query(`
+                        SELECT * FROM shareholders 
+                        WHERE asic_extract_id = ${asicExtractId}
+                        AND status = 'Current'
+                        ORDER BY number_held DESC
+                    `);
+                    shareholders = shareholdersResult;
+                    console.log('🔍 Shareholders found:', shareholders.length);
+                } catch (error) {
+                    console.log('⚠️ shareholders table error, using empty array:', error.message);
+                    shareholders = [];
+                }
+            } else {
+                console.log('⚠️ No ASIC extract ID found, using empty shareholders array');
+            }
 
-            // Get share structures
-            const [shareStructures] = await sequelize.query(`
-                SELECT * FROM share_structures 
-                WHERE asic_extract_id = '${asicExtractId}'
-                ORDER BY share_count DESC
-            `);
+            // Get share structures using asic_extract_id
+            let shareStructures = [];
+            if (asicExtractId) {
+                try {
+                    const [shareStructuresResult] = await sequelize.query(`
+                        SELECT * FROM share_structures 
+                        WHERE asic_extract_id = ${asicExtractId}
+                        ORDER BY share_count DESC
+                    `);
+                    shareStructures = shareStructuresResult;
+                    console.log('🔍 Share structures found:', shareStructures.length);
+                } catch (error) {
+                    console.log('⚠️ share_structures table error, using empty array:', error.message);
+                    shareStructures = [];
+                }
+            } else {
+                console.log('⚠️ No ASIC extract ID found, using empty share structures array');
+            }
+
+            // Get secretaries from directors table where type = 'Secretary'
+            let secretaries = [];
+            if (asicExtractId) {
+                try {
+                    const [secretariesResult] = await sequelize.query(`
+                        SELECT * FROM directors 
+                        WHERE asic_extract_id = ${asicExtractId}
+                        AND status = 'Current'
+                        AND type = 'Secretary'
+                        ORDER BY start_date DESC
+                    `);
+                    secretaries = secretariesResult;
+                    console.log('🔍 Secretaries found:', secretaries.length);
+                } catch (error) {
+                    console.log('⚠️ secretaries query error, using empty array:', error.message);
+                    secretaries = [];
+                }
+            } else {
+                console.log('⚠️ No ASIC extract ID found, using empty secretaries array');
+            }
 
             // Get tax debts
-            const [taxDebts] = await sequelize.query(`
-                SELECT * FROM tax_debts 
-                WHERE report_id = ${reportId}
-                ORDER BY amount DESC
-                LIMIT 1
-            `);
+            let taxDebt = null;
+            try {
+                const [taxDebts] = await sequelize.query(`
+                    SELECT * FROM tax_debts 
+                    WHERE report_id = ${reportId}
+                    ORDER BY amount DESC
+                    LIMIT 1
+                `);
+                taxDebt = taxDebts[0];
+                console.log('🔍 Tax debt found:', !!taxDebt);
+            } catch (error) {
+                console.log('⚠️ tax_debts table error, using null:', error.message);
+                taxDebt = null;
+            }
 
             // Get ASIC documents (handle missing table gracefully)
             let asicDocuments = [];
@@ -191,27 +282,44 @@ class PDFGenerator {
                         date_received: doc.received_at || doc.effective_at || new Date().toISOString()
                     };
                 });
+                console.log('🔍 ASIC documents found:', asicDocuments.length);
             } catch (error) {
                 console.log('⚠️ asic_documents table error, using empty array:', error.message);
                 asicDocuments = [];
             }
 
-            const entity = entities[0] || {};
-            const taxDebt = taxDebts[0];
+            // Get documents from documents table using asic_extract_id
+            let documents = [];
+            if (asicExtractId) {
+                try {
+                    const [documentsResult] = await sequelize.query(`
+                        SELECT * FROM documents 
+                        WHERE asic_extract_id = ${asicExtractId}
+                        ORDER BY received_at DESC
+                    `);
+                    documents = documentsResult;
+                    console.log('🔍 Documents found:', documents.length);
+                } catch (error) {
+                    console.log('⚠️ documents table error, using empty array:', error.message);
+                    documents = [];
+                }
+            } else {
+                console.log('⚠️ No ASIC extract ID found, using empty documents array');
+            }
 
-            // Calculate ASIC Documents stats
-            const totalDocuments = asicDocuments.length;
+            // Calculate Documents stats using documents table
+            const totalDocuments = documents.length;
             const currentYear = new Date().getFullYear();
-            const currentYearFilings = asicDocuments.filter(doc => {
-                const docYear = new Date(doc.date_received).getFullYear();
+            const currentYearFilings = documents.filter(doc => {
+                const docYear = new Date(doc.received_at).getFullYear();
                 return docYear === currentYear;
             }).length;
             
             // Get unique form types
-            const uniqueFormTypes = [...new Set(asicDocuments.map(doc => doc.form_type))].length;
+            const uniqueFormTypes = [...new Set(documents.map(doc => doc.form_code))].length;
             
             // Calculate date range
-            const dates = asicDocuments.map(doc => new Date(doc.date_received)).sort((a, b) => a - b);
+            const dates = documents.map(doc => new Date(doc.received_at)).sort((a, b) => a - b);
             const earliestYear = dates.length > 0 ? dates[0].getFullYear() : currentYear;
             const latestYear = dates.length > 0 ? dates[dates.length - 1].getFullYear() : currentYear;
             const dateRange = `${earliestYear}-${latestYear}`;
@@ -228,25 +336,27 @@ class PDFGenerator {
                 asic_status: entity.asic_status
             });
 
-            // Get ASIC extract type from the asic_extracts table
-            const [asicExtractTypes] = await sequelize.query(`
-                SELECT type FROM asic_extracts 
-                WHERE report_id = ${reportId}
-                LIMIT 1
-            `);
-            const asicExtractType = asicExtractTypes[0]?.type || 'Current';
+          
 
-            // Get secretaries count
-            const [secretaries] = await sequelize.query(`
-                SELECT * FROM directors 
-                WHERE asic_extract_id = '${asicExtractId}'
-                AND type = 'Secretary'
-                AND status = 'Current'
-                ORDER BY start_date DESC
-            `);
+            // Initialize with default values
+            const asicExtractType = 'Current';
 
             // Calculate total addresses (addresses + contact_addresses)
             const totalAddresses = (addresses?.length || 0) + (contactAddresses?.length || 0);
+
+            // Helper function to format dates as DD-MM-YYYY
+            const formatDate = (dateString) => {
+                if (!dateString) return 'N/A';
+                try {
+                    const date = new Date(dateString);
+                    const day = date.getDate().toString().padStart(2, '0');
+                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    const year = date.getFullYear();
+                    return `${day}-${month}-${year}`;
+                } catch (error) {
+                    return 'N/A';
+                }
+            };
 
             const baseData = {
                 reportId: reportId,
@@ -271,18 +381,107 @@ class PDFGenerator {
                     hour: '2-digit',
                     minute: '2-digit'
                 }),
+                // Additional entity fields for page 2
+                isArbn: entity.is_arbn || false,
+                abrGstRegistrationDate: entity.abr_gst_registration_date ? 
+                    new Date(entity.abr_gst_registration_date).toLocaleDateString('en-AU') : 'N/A',
+                abrPostcode: entity.abr_postcode || 'N/A',
+                abrState: entity.abr_state || 'N/A',
+                documentNumber: entity.document_number || 'N/A',
+                formerNames: entity.former_names || [],
+                reference: entity.reference || 'N/A',
+                nameStartAt: entity.name_start_at ? 
+                    new Date(entity.name_start_at).toLocaleDateString('en-AU') : 'N/A',
+                disclosingEntity: entity.disclosing_entity || 'N/A',
+                organisationClass: entity.organisation_class || 'N/A',
+                organisationSubClass: entity.organisation_sub_class || 'N/A',
+                // Tax debt and other data
                 hasTaxDebt: !!taxDebt,
                 taxDebtAmount: taxDebt ? `$${parseFloat(taxDebt.amount).toLocaleString()}` : '$0.00',
                 taxDebtDate: taxDebt ? 
                     new Date(taxDebt.date_updated).toLocaleDateString('en-AU') : 'N/A',
-                addresses: addresses || [],
-                contactAddresses: contactAddresses || [],
+                addresses: (addresses || []).map(addr => ({
+                    ...addr,
+                    start_date: formatDate(addr.start_date),
+                    end_date: formatDate(addr.end_date)
+                })),
+                contactAddresses: (contactAddresses || []).map(addr => ({
+                    ...addr,
+                    start_date: formatDate(addr.start_date),
+                    end_date: formatDate(addr.end_date)
+                })),
                 totalAddresses: totalAddresses,
                 directors: directors || [],
                 secretaries: secretaries || [],
                 shareholders: shareholders || [],
                 shareStructures: shareStructures || [],
                 asicDocuments: asicDocuments || [],
+                documents: (documents || []).map(doc => ({
+                    ...doc,
+                    form_type: doc.form_code, // Map form_code to form_type for template
+                    date_received: formatDate(doc.received_at)
+                })),
+                // Counts for display
+                totalDirectors: (directors || []).length,
+                totalSecretaries: (secretaries || []).length,
+                totalShareholders: (shareholders || []).length,
+                // Page 4 data - formatted for display with addresses
+                directorsFormatted: (directors || []).map(dir => {
+                    // Find any director address (since we don't have name matching)
+                    const matchingAddress = (allAddresses || []).find(addr => 
+                        addr.address_category === 'director'
+                    );
+                    console.log('🔍 Director address matching:', {
+                        directorName: dir.name,
+                        addressCategory: 'director',
+                        matchingAddress: matchingAddress ? 'FOUND' : 'NOT FOUND',
+                        allAddressesCount: allAddresses.length
+                    });
+                    return {
+                        ...dir,
+                        start_date: formatDate(dir.start_date),
+                        end_date: formatDate(dir.end_date),
+                        date_of_birth: dir.dob ? formatDate(dir.dob) : 'N/A',
+                        place_of_birth: dir.place_of_birth || 'N/A',
+                        address: matchingAddress || null
+                    };
+                }),
+                secretariesFormatted: (secretaries || []).map(sec => {
+                    // Find any secretary address (since we don't have name matching)
+                    const matchingAddress = (allAddresses || []).find(addr => 
+                        addr.address_category === 'secretary'
+                    );
+                    console.log('🔍 Secretary address matching:', {
+                        secretaryName: sec.name,
+                        addressCategory: 'secretary',
+                        matchingAddress: matchingAddress ? 'FOUND' : 'NOT FOUND'
+                    });
+                    return {
+                        ...sec,
+                        start_date: formatDate(sec.start_date),
+                        end_date: formatDate(sec.end_date),
+                        date_of_birth: sec.dob ? formatDate(sec.dob) : 'N/A',
+                        place_of_birth: sec.place_of_birth || 'N/A',
+                        address: matchingAddress || null
+                    };
+                }),
+                shareholdersFormatted: (shareholders || []).map(share => {
+                    // Find any shareholder address (since we don't have name matching)
+                    const matchingAddress = (allAddresses || []).find(addr => 
+                        addr.address_category === 'shareholder'
+                    );
+                    console.log('🔍 Shareholder address matching:', {
+                        shareholderName: share.name,
+                        addressCategory: 'shareholder',
+                        matchingAddress: matchingAddress ? 'FOUND' : 'NOT FOUND'
+                    });
+                    return {
+                        ...share,
+                        start_date: formatDate(share.start_date),
+                        end_date: formatDate(share.end_date),
+                        address: matchingAddress || null
+                    };
+                }),
                 totalDocuments: totalDocuments,
                 currentYearFilings: currentYearFilings,
                 uniqueFormTypes: uniqueFormTypes,
