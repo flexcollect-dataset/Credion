@@ -35,40 +35,15 @@ const UserProfile = () => {
   const fetchPaymentMethods = async () => {
     setLoading(true);
     try {
-      const methods = await apiService.getPaymentMethods();
-      setPaymentMethods(methods);
+      const response = await apiService.getPaymentMethods();
+      if (response.success) {
+        setPaymentMethods(response.paymentMethods);
+      } else {
+        setPaymentMethods([]);
+      }
     } catch (error) {
       console.error('Error fetching payment methods:', error);
-      // Mock data for demonstration
-      setPaymentMethods([
-        {
-          id: "pm_1SIn7DHzbA6hZtQg9NuT0HPQ",
-          last4: "8431",
-          brand: "amex",
-          expiryMonth: 12,
-          expiryYear: 2027,
-          cardholderName: "Card Holder",
-          isDefault: true
-        },
-        {
-          id: "pm_1SIn6eHzbA6hZtQgjKLu1xiZ",
-          last4: "5556",
-          brand: "visa",
-          expiryMonth: 12,
-          expiryYear: 2028,
-          cardholderName: "Card Holder",
-          isDefault: false
-        },
-        {
-          id: "pm_1SIn17HzbA6hZtQg79Vz6bjM",
-          last4: "4242",
-          brand: "visa",
-          expiryMonth: 5,
-          expiryYear: 2029,
-          cardholderName: "Card Holder",
-          isDefault: false
-        }
-      ]);
+
     } finally {
       setLoading(false);
     }
@@ -395,11 +370,36 @@ const UserProfile = () => {
                               </td>
                               <td className="py-4 px-4">
                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                  report.asicType === 'current' 
+                                  report.type === 'asic-current' 
                                     ? 'bg-blue-100 text-blue-800' 
-                                    : 'bg-purple-100 text-purple-800'
+                                    : report.type === 'asic-historical'
+                                    ? 'bg-purple-100 text-purple-800'
+                                    : report.type === 'court'
+                                    ? 'bg-green-100 text-green-800'
+                                    : report.type === 'ato'
+                                    ? 'bg-yellow-100 text-yellow-800'
+                                    : report.type === 'land'
+                                    ? 'bg-indigo-100 text-indigo-800'
+                                    : report.type === 'ppsr'
+                                    ? 'bg-pink-100 text-pink-800'
+                                    : report.type === 'property'
+                                    ? 'bg-orange-100 text-orange-800'
+                                    : report.type?.startsWith('director')
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-gray-100 text-gray-800'
                                 }`}>
-                                  {report.asicType === 'current' ? 'Current' : 'Historical'}
+                                  {report.type === 'asic-current' ? 'ASIC Current' :
+                                   report.type === 'asic-historical' ? 'ASIC Historical' :
+                                   report.type === 'court' ? 'Court' :
+                                   report.type === 'ato' ? 'ATO' :
+                                   report.type === 'land' ? 'Land Title' :
+                                   report.type === 'ppsr' ? 'PPSR' :
+                                   report.type === 'property' ? 'Property' :
+                                   report.type === 'director-ppsr' ? 'Director PPSR' :
+                                   report.type === 'director-bankruptcy' ? 'Director Bankruptcy' :
+                                   report.type === 'director-property' ? 'Director Property' :
+                                   report.type === 'director-related' ? 'Director Related' :
+                                   report.type || 'Unknown'}
                                 </span>
                               </td>
                               <td className="py-4 px-4">

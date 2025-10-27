@@ -32,6 +32,36 @@ const authenticateToken = (req, res, next) => {
     });
 };
 
+// Get all user reports (public - no authentication required)
+router.get('/', async (req, res) => {
+  try {
+    const reports = await UserReport.findAll({
+      order: [['created_at', 'DESC']]
+    });
+
+    res.json({
+      success: true,
+      reports: reports.map(report => ({
+        reportId: report.reportId,
+        userId: report.userId,
+        matterId: report.matterId,
+        reportName: report.reportName,
+        isPaid: report.isPaid,
+        type: report.type,
+        createdAt: report.createdAt,
+        updatedAt: report.updatedAt
+      }))
+    });
+
+  } catch (error) {
+    console.error('Error getting reports:', error);
+    res.status(500).json({
+      error: 'REPORTS_RETRIEVAL_FAILED',
+      message: error.message || 'Failed to get reports'
+    });
+  }
+});
+
 // Get user reports by matter ID
 router.get('/matter/:matterId', authenticateToken, async (req, res) => {
   try {
@@ -54,6 +84,7 @@ router.get('/matter/:matterId', authenticateToken, async (req, res) => {
         matterId: report.matterId,
         reportName: report.reportName,
         isPaid: report.isPaid,
+        type: report.type,
         createdAt: report.createdAt,
         updatedAt: report.updatedAt
       }))

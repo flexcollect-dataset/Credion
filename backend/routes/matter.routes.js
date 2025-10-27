@@ -100,7 +100,25 @@ router.get('/search', authenticateToken, async (req, res) => {
     const matters = await Matter.findAll({
       where: whereClause,
       order: [['created_at', 'DESC']],
-      limit: 20
+      limit: 20,
+      attributes: ['matterId', 'matterName', 'description', 'status', 'createdAt', 'updatedAt']
+    });
+
+    console.log('Matters found:', matters.length);
+    if (matters.length > 0) {
+      console.log('First matter:', {
+        matterId: matters[0].matterId,
+        matterName: matters[0].matterName,
+        createdAt: matters[0].createdAt,
+        updatedAt: matters[0].updatedAt
+      });
+    }
+
+    // Add cache-busting headers
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0'
     });
 
     res.json({

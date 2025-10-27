@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const { User, UserPaymentMethod, Report } = require('../models');
+const { User, UserPaymentMethod, Report, UserReport } = require('../models');
 const axios = require('axios');
 
 // Middleware to check if user is authenticated
@@ -17,14 +17,14 @@ const authenticateSession = (req, res, next) => {
 };
 
 // Function to check if report data exists and is within 7 days
-async function checkReportCache(abn, asicType) {
+async function checkReportCache(abn, type) {
     try {
         const sevenDaysAgo = new Date();
         sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
         
         console.log(`🔍 CACHE CHECK DETAILS:`);
         console.log(`   Looking for ABN: "${abn}"`);
-        console.log(`   Looking for ASIC Type: "${asicType}"`);
+        console.log(`   Looking for Type: "${type}"`);
         console.log(`   Seven days ago: ${sevenDaysAgo.toISOString()}`);
         
         // First, let's see ALL reports for this ABN
@@ -37,23 +37,38 @@ async function checkReportCache(abn, asicType) {
         
         console.log(`   Found ${allReportsForABN.length} total reports for ABN ${abn}:`);
         allReportsForABN.forEach((report, index) => {
-            console.log(`     ${index + 1}. Report ID: ${report.reportId}, ASIC: ${report.asicType}, Created: ${report.created_at}, Active: ${report.isActive}`);
+            console.log(`     ${index + 1}. Report ID: ${report.reportId}, Type: ${report.type}, ASIC: ${report.asicType}, Sub: ${report.subType}, Created: ${report.created_at}`);
         });
         
+        // Parse the type to get granular fields
+        const parsedType = parseReportType(type);
+        
+        // Build where clause for granular type matching
+        const whereClause = {
+            abn: abn,
+            created_at: {
+                [require('sequelize').Op.gte]: sevenDaysAgo
+            }
+        };
+        
+        // Match based on parsed type fields
+        if (parsedType.type) {
+            whereClause.type = parsedType.type;
+        }
+        if (parsedType.asicType) {
+            whereClause.asicType = parsedType.asicType;
+        }
+        if (parsedType.subType) {
+            whereClause.subType = parsedType.subType;
+        }
+        
         const existingReport = await Report.findOne({
-            where: {
-                abn: abn,
-                asicType: asicType,
-                isActive: true,
-                created_at: {
-                    [require('sequelize').Op.gte]: sevenDaysAgo
-                }
-            },
+            where: whereClause,
             order: [['created_at', 'DESC']]
         });
         
         if (existingReport) {
-            console.log(`✅ CACHE HIT: Found cached report for ABN ${abn} (${asicType}) from ${existingReport.created_at}`);
+            console.log(`✅ CACHE HIT: Found cached report for ABN ${abn} (${type}) from ${existingReport.created_at}`);
             console.log(`   Report ID: ${existingReport.reportId}, UUID: ${existingReport.uuid}`);
             return {
                 exists: true,
@@ -62,7 +77,7 @@ async function checkReportCache(abn, asicType) {
             };
         }
         
-        console.log(`❌ CACHE MISS: No cached report found for ABN ${abn} (${asicType})`);
+        console.log(`❌ CACHE MISS: No cached report found for ABN ${abn} (${type})`);
         return {
             exists: false,
             report: null,
@@ -606,8 +621,57 @@ async function parseAndStoreReportData(reportId, reportData) {
     }
 }
 
+// Helper function to parse report type into granular fields
+function parseReportType(type) {
+    const result = {
+        type: null,
+        asicType: null,
+        subType: null
+    };
+    
+    // Parse main type
+    if (type.includes('asic')) {
+        result.type = 'ASIC';
+        if (type.includes('current')) {
+            result.asicType = 'CURRENT';
+        } else if (type.includes('historical')) {
+            result.asicType = 'HISTORICAL';
+        } else if (type.includes('company')) {
+            result.asicType = 'COMPANY';
+        } else if (type.includes('personal')) {
+            result.asicType = 'PERSONAL';
+        } else if (type.includes('document')) {
+            result.asicType = 'ADD DOCUMENT SEARCH';
+        }
+    } else if (type.includes('court')) {
+        result.type = 'COURT';
+        result.subType = 'ACN/ABN COURT FILES';
+    } else if (type.includes('ato')) {
+        result.type = 'ATO';
+    } else if (type.includes('land')) {
+        result.type = 'LAND TITLE';
+        result.subType = 'ABN/ACN PROPERTY TITLE';
+    } else if (type.includes('ppsr')) {
+        result.subType = 'PPSR';
+    } else if (type.includes('property')) {
+        result.subType = 'ABN/ACN PROPERTY TITLE';
+    } else if (type.includes('director')) {
+        if (type.includes('ppsr')) {
+            result.subType = 'DIRECTOR PPSR';
+        } else if (type.includes('bankruptcy')) {
+            result.subType = 'DIRECTOR BANKRUPTCY';
+        } else if (type.includes('property')) {
+            result.subType = 'DIRECTOR PROPERTY TITLE';
+        } else if (type.includes('related')) {
+            result.subType = 'DIRECTOR RELATED ENTITIES';
+        }
+    }
+    
+    return result;
+}
+
 // Function to create report via external API
-async function createReport({ business, asicType, userId, paymentIntentId, matterId }) {
+async function createReport({ business, type, userId, paymentIntentId, matterId }) {
     try {
         const apiUrl = 'https://alares.com.au/api/reports/create';
         const bearerToken = 'pIIDIt6acqekKFZ9a7G4w4hEoFDqCSMfF6CNjx5lCUnB6OF22nnQgGkEWGhv';
@@ -619,14 +683,105 @@ async function createReport({ business, asicType, userId, paymentIntentId, matte
         const abn = business?.Abn || business?.abn || business?.ABN;
         
         console.log(`   Extracted ABN: "${abn}"`);
-        console.log(`   ASIC Type: "${asicType}"`);
+        console.log(`   Report Type: "${type}"`);
         
         if (!abn) {
             throw new Error('ABN not found in business data');
         }
         
-        // Cache already checked before calling this function - proceed with API calls
-        console.log(`📡 Creating new report for ABN ${abn} (${asicType}) - CALLING EXTERNAL APIS`);
+        // Parse the type into granular fields for cache checking
+        const parsedType = parseReportType(type);
+        
+        // Check if report already exists in Reports table (by ABN only)
+        console.log(`🔍 Checking Reports table for existing report by ABN...`);
+        console.log(`   ABN: ${abn}`);
+        
+        const existingReport = await Report.findOne({
+            where: {
+                abn: abn
+            },
+            order: [['created_at', 'DESC']]
+        });
+        
+        if (existingReport) {
+            console.log(`✅ CACHE HIT: Found existing report in Reports table`);
+            console.log(`   Report ID: ${existingReport.reportId}`);
+            console.log(`   UUID: ${existingReport.uuid}`);
+            console.log(`   Created: ${existingReport.created_at}`);
+            
+            // Fetch the report data from Alares API for parsing and storing
+            let reportData = null;
+            try {
+                console.log('📡 Fetching report data from Alares API for cached report...');
+                reportData = await fetchReportData(existingReport.uuid, bearerToken);
+                console.log('✅ Report data fetched successfully from Alares API');
+            } catch (fetchError) {
+                console.error('⚠️ Error fetching report data:', fetchError.message);
+                console.log('⚠️ Continuing without fetching detailed data...');
+            }
+            
+            // Parse and store structured data in separate tables (even for cached reports)
+            if (reportData) {
+                try {
+                    await parseAndStoreReportData(existingReport.reportId, reportData);
+                    console.log('✅ Structured report data stored successfully for cached report');
+                } catch (parseError) {
+                    console.error('⚠️ Error storing structured data for cached report:', parseError.message);
+                    // Continue even if structured storage fails
+                }
+            }
+            
+            // Check if UserReport already exists for this user+matter+report combination
+            const existingUserReport = await UserReport.findOne({
+                where: {
+                    userId: userId,
+                    matterId: matterId || null,
+                    reportReferenceId: existingReport.reportId,
+                    type: parsedType.type,
+                    asicType: parsedType.asicType,
+                    subType: parsedType.subType
+                }
+            });
+            
+            // Only create UserReport if it doesn't already exist
+            if (!existingUserReport) {
+                try {
+                    const userReport = await UserReport.create({
+                        userId: userId,
+                        matterId: matterId || null,
+                        reportReferenceId: existingReport.reportId,
+                        reportName: `${parsedType.type || parsedType.subType || type.toUpperCase()} Report for ${business.Name || business.name || 'Unknown Company'}`,
+                        isPaid: true,
+                        type: parsedType.type,
+                        asicType: parsedType.asicType,
+                        subType: parsedType.subType,
+                        createdAt: new Date(),
+                        updatedAt: new Date()
+                    });
+                    
+                    console.log('✅ UserReport created (using cached report):', userReport.reportId);
+                } catch (userReportError) {
+                    console.error('❌ Error creating UserReport:', userReportError);
+                    throw userReportError;
+                }
+            } else {
+                console.log('⚠️ UserReport already exists - skipping creation to avoid duplicate');
+            }
+            
+            return {
+                success: true,
+                reportId: existingReport.reportId,
+                uuid: existingReport.uuid,
+                status: 'cached',
+                fromCache: true,
+                savedReportId: existingReport.reportId,
+                type: parsedType.type
+            };
+        }
+        
+        // Cache miss - proceed with creating new report
+        console.log(`❌ CACHE MISS: No existing report found - creating new report`);
+        console.log(`📡 Creating new report for ABN ${abn} (${type}) - CALLING EXTERNAL APIS`);
         
         // Prepare query parameters
         const params = {
@@ -635,11 +790,29 @@ async function createReport({ business, asicType, userId, paymentIntentId, matte
             alares_report: '1'
         };
         
-        // Add ASIC type parameter
-        if (asicType === 'current') {
+        // Add report type parameters based on the type
+        if (type === 'asic-current' || type === 'current') {
             params.asic_current = '1';
-        } else if (asicType === 'historical') {
+        } else if (type === 'asic-historical' || type === 'historical') {
             params.asic_historical = '1';
+        } else if (type === 'court') {
+            params.court = '1';
+        } else if (type === 'ato') {
+            params.ato = '1';
+        } else if (type === 'land') {
+            params.land = '1';
+        } else if (type === 'ppsr') {
+            params.ppsr = '1';
+        } else if (type === 'property') {
+            params.property = '1';
+        } else if (type === 'director-ppsr') {
+            params.director_ppsr = '1';
+        } else if (type === 'director-bankruptcy') {
+            params.director_bankruptcy = '1';
+        } else if (type === 'director-property') {
+            params.director_property = '1';
+        } else if (type === 'director-related') {
+            params.director_related = '1';
         }
         
         console.log('Calling report API with params:', params);
@@ -663,12 +836,33 @@ async function createReport({ business, asicType, userId, paymentIntentId, matte
         const savedReport = await Report.create({
             uuid: createResponse.data.uuid,
             abn: abn,
-            asicType: asicType,
-            userId: userId,
-            matterId: matterId || null
+            type: parsedType.type,
+            asicType: parsedType.asicType,
+            subType: parsedType.subType
         });
         
         console.log('Report data saved to database:', savedReport.reportId);
+        
+        // Create UserReport record for user-specific tracking
+        try {
+            const userReport = await UserReport.create({
+                userId: userId,
+                matterId: matterId || null, // Include matterId if provided
+                reportReferenceId: savedReport.reportId,
+                reportName: `${parsedType.type || parsedType.subType || type.toUpperCase()} Report for ${business.Name || business.name || 'Unknown Company'}`,
+                isPaid: true, // Report is paid for
+                type: parsedType.type,
+                asicType: parsedType.asicType,
+                subType: parsedType.subType,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+            
+            console.log('UserReport created:', userReport.reportId);
+        } catch (userReportError) {
+            console.error('Error creating UserReport:', userReportError);
+            // Continue even if UserReport creation fails
+        }
         
         // Parse and store structured data in separate tables
         try {
@@ -686,7 +880,8 @@ async function createReport({ business, asicType, userId, paymentIntentId, matte
             uuid: createResponse.data.uuid,
             status: createResponse.status,
             fromCache: false,
-            savedReportId: savedReport.reportId
+            savedReportId: savedReport.reportId,
+            type: parsedType.type
         };
         
     } catch (error) {
@@ -963,7 +1158,7 @@ router.delete('/payment-methods/:id', authenticateSession, async (req, res) => {
 // Process payment (create and confirm payment intent)
 router.post('/process-payment', authenticateSession, async (req, res) => {
     try {
-        const { amount, currency = 'aud', description, paymentMethodId, business, asicType } = req.body;
+        const { amount, currency = 'aud', description, paymentMethodId, business, type, matterId } = req.body;
         const userId = req.session.userId;
 
         if (!amount || amount <= 0) {
@@ -1019,7 +1214,7 @@ router.post('/process-payment', authenticateSession, async (req, res) => {
                 paymentMethodId: paymentMethodId.toString(),
                 businessName: business?.Name || business?.name || 'Unknown',
                 businessAbn: business?.Abn || business?.abn || 'N/A',
-                asicType: asicType || 'current',
+                reportType: type || 'current',
                 description: description || 'Credion Payment'
             }
         };
@@ -1051,11 +1246,11 @@ router.post('/process-payment', authenticateSession, async (req, res) => {
             }
             
             // Check cache AFTER payment success
-            console.log(`🔍 Checking cache AFTER payment for ABN: ${abn}, ASIC Type: ${asicType}`);
-            const cacheCheck = await checkReportCache(abn, asicType);
+            console.log(`🔍 Checking cache AFTER payment for ABN: ${abn}, Type: ${type}`);
+            const cacheCheck = await checkReportCache(abn, type);
             
             if (cacheCheck.exists && cacheCheck.isRecent) {
-                console.log(`✅ CACHE HIT: Found cached report for ABN ${abn} (${asicType}) - SKIPPING API CALLS`);
+                console.log(`✅ CACHE HIT: Found cached report for ABN ${abn} (${type}) - SKIPPING API CALLS`);
                 
                 return res.json({
                     success: true,
@@ -1078,15 +1273,16 @@ router.post('/process-payment', authenticateSession, async (req, res) => {
                 });
             }
             
-            console.log(`❌ CACHE MISS: No cached report found for ABN ${abn} (${asicType}) - CALLING EXTERNAL APIS`);
+            console.log(`❌ CACHE MISS: No cached report found for ABN ${abn} (${type}) - CALLING EXTERNAL APIS`);
             
             // Call external API to create report (only if no cache)
             try {
                 const reportResponse = await createReport({
                     business,
-                    asicType,
+                    type,
                     userId,
-                    paymentIntentId: paymentIntent.id
+                    paymentIntentId: paymentIntent.id,
+                    matterId: matterId || null
                 });
                 
                 console.log('Report created successfully:', reportResponse);
@@ -1237,4 +1433,5 @@ router.post('/create-payment-intent', authenticateSession, async (req, res) => {
 
 module.exports = router;
 module.exports.createReport = createReport;
+module.exports.checkReportCache = checkReportCache;
 

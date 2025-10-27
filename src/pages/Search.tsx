@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import PropertyModal from '../components/PropertyModal';
 import { apiService } from '../services/api';
 
@@ -15,17 +14,17 @@ interface ReceiptItem {
 
 const Search: React.FC = () => {
   // Check if user is logged in
-  const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [currentMatter, setCurrentMatter] = useState<any>(null);
+  
+  // Refs for debouncing
+  const searchTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     const userData = localStorage.getItem('user');
     const matterData = localStorage.getItem('currentMatter');
     
-    if (userData) {
-      setUser(JSON.parse(userData));
-    } else {
+    if (!userData) {
       // Redirect to login if not logged in
       window.location.href = '/login';
     }
@@ -38,6 +37,15 @@ const Search: React.FC = () => {
     }
     
     setIsLoading(false);
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
   }, []);
 
   // State management
@@ -59,7 +67,6 @@ const Search: React.FC = () => {
   const [totalPrice, setTotalPrice] = useState(0);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
   const [showDirectorPropertyModal, setShowDirectorPropertyModal] = useState(false);
-  const [propertyModalType, setPropertyModalType] = useState<'property' | 'director-property'>('property');
 
   // Real ABN search results
   const [dropdownItems, setDropdownItems] = useState<SearchItem[]>([]);
@@ -189,11 +196,8 @@ const Search: React.FC = () => {
     setOrganizationSelected(true);
   };
 
-  // Handle search input change with real ABN search
-  const handleSearchInputChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setSearchInput(value);
-    
+  // Debounced search function
+  const debouncedSearch = useCallback(async (value: string) => {
     if (value.length >= 3) {
       setIsSearching(true);
       try {
@@ -231,6 +235,22 @@ const Search: React.FC = () => {
       setDropdownItems([]);
       setShowDropdown(false);
     }
+  }, []);
+
+  // Handle search input change with debouncing
+  const handleSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setSearchInput(value);
+    
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    
+    // Set new timeout for debounced search
+    searchTimeoutRef.current = setTimeout(() => {
+      debouncedSearch(value);
+    }, 300);
   };
 
   // Handle checkbox changes
@@ -252,10 +272,8 @@ const Search: React.FC = () => {
 
   const handleOrgAdditionalChange = (search: string) => {
     if (search === 'property' && organizationSelected) {
-      setPropertyModalType('property');
       setShowPropertyModal(true);
     } else if (search === 'director-property' && organizationSelected) {
-      setPropertyModalType('director-property');
       setShowDirectorPropertyModal(true);
     } else {
       setSelectedOrgAdditionalSearches(prev => 
@@ -343,29 +361,54 @@ const Search: React.FC = () => {
       for (const item of receiptItems) {
         console.log('Processing item:', item);
         
+        // Determine the report type based on the item name
+        let reportType = '';
         if (item.name.includes('ASIC')) {
-          // Extract ASIC type from the item name
-          const asicType = item.name.includes('CURRENT') ? 'current' : 'historical';
-          
-          // Get the selected organization's ABN
-          const selectedOrg = dropdownItems.find(org => org.name === searchInput);
-          if (!selectedOrg) {
-            console.log('Organization not found in dropdown items:', dropdownItems);
-            throw new Error('Organization not found');
+          reportType = item.name.includes('CURRENT') ? 'asic-current' : 'asic-historical';
+        } else if (item.name.includes('COURT')) {
+          reportType = 'court';
+        } else if (item.name.includes('ATO')) {
+          reportType = 'ato';
+        } else if (item.name.includes('LAND')) {
+          reportType = 'land';
+        } else if (item.name.includes('PPSR')) {
+          reportType = 'ppsr';
+        } else if (item.name.includes('PROPERTY')) {
+          reportType = 'property';
+        } else if (item.name.includes('DIRECTOR')) {
+          if (item.name.includes('PPSR')) {
+            reportType = 'director-ppsr';
+          } else if (item.name.includes('BANKRUPTCY')) {
+            reportType = 'director-bankruptcy';
+          } else if (item.name.includes('PROPERTY')) {
+            reportType = 'director-property';
+          } else {
+            reportType = 'director-related';
           }
+        } else {
+          // Default fallback
+          reportType = item.name.toLowerCase().replace(/\s+/g, '-');
+        }
+        
+        // Get the selected organization's ABN
+        const selectedOrg = dropdownItems.find(org => org.name === searchInput);
+        if (!selectedOrg) {
+          console.log('Organization not found in dropdown items:', dropdownItems);
+          throw new Error('Organization not found');
+        }
 
-          console.log('Creating report for:', selectedOrg);
+        console.log('Creating report for:', selectedOrg, 'Type:', reportType);
 
-          // Create report via backend API
-          const reportData = {
-            business: {
-              Abn: selectedOrg.abn.replace('ABN: ', ''),
-              Name: selectedOrg.name
-            },
-            asicType: asicType,
-            userId: JSON.parse(localStorage.getItem('user') || '{}').userId,
-            matterId: currentMatter?.matterId
-          };
+        // Create report via backend API
+        const reportData = {
+          business: {
+            Abn: selectedOrg.abn.replace('ABN: ', ''),
+            Name: selectedOrg.name
+          },
+          type: reportType,
+          userId: JSON.parse(localStorage.getItem('user') || '{}').userId,
+          matterId: currentMatter?.matterId
+        };
 
           console.log('Report data:', reportData);
 
@@ -375,11 +418,9 @@ const Search: React.FC = () => {
           
           reports.push({
             ...report,
-            type: 'ASIC',
-            asicType: asicType
+            type: reportType
           });
         }
-      }
 
       console.log('All reports created:', reports);
       setGeneratedReports(reports);
@@ -466,22 +507,6 @@ const Search: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* Debug Panel */}
-          {import.meta.env.DEV && (
-            <div className="fixed top-20 left-4 bg-black bg-opacity-80 text-white p-4 rounded-lg text-xs max-w-sm z-50">
-              <h3 className="font-bold mb-2">Debug Info:</h3>
-              <p>User: {user ? `${user.firstName} ${user.lastName}` : 'Not logged in'}</p>
-              <p>Matter: {currentMatter ? currentMatter.matterName : 'No matter selected'}</p>
-              <p>Organization Selected: {organizationSelected ? 'Yes' : 'No'}</p>
-              <p>Search Input: {searchInput || 'None'}</p>
-              <p>Dropdown Items: {dropdownItems.length}</p>
-              <p>Show Dropdown: {showDropdown ? 'Yes' : 'No'}</p>
-              <p>Filtered Items: {filteredDropdownItems.length}</p>
-              <p>Receipt Items: {receiptItems.length}</p>
-              <p>Total Price: ${totalPrice}</p>
-            </div>
-          )}
-
           {/* Matter Context Banner */}
           {currentMatter && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
@@ -507,7 +532,7 @@ const Search: React.FC = () => {
           )}
 
           {/* Main Content */}
-          <main className="max-w-6xl mx-auto px-8 py-16 mr-96">
+          <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-16 lg:mr-96">
         {/* Category Selection */}
         <div className="card">
           <h2 className="section-title">Select <span>Category</span></h2>

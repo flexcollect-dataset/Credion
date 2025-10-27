@@ -46,11 +46,8 @@ UserReport.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 Matter.hasMany(UserReport, { foreignKey: 'matter_id', as: 'userReports', onDelete: 'CASCADE' });
 UserReport.belongsTo(Matter, { foreignKey: 'matter_id', as: 'matter' });
 
-// Report associations - User only (no Matter link for now)
-User.hasMany(Report, { foreignKey: 'user_id', as: 'reports', onDelete: 'CASCADE' });
-Report.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
-
-// Report associations (removed user_id foreign key)
+// Report associations - Public reports (no user relationship)
+// Report model is for public reports, no user association needed
 
 Report.hasOne(Entity, { foreignKey: 'report_id', as: 'entity', onDelete: 'CASCADE'});
 Entity.belongsTo(Report, { foreignKey: 'report_id', as: 'report' });

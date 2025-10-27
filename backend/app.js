@@ -325,7 +325,7 @@ app.get('/reports', async (req, res) => {
         id: report.reportId,
         uuid: report.uuid,
         abn: report.abn,
-        asicType: report.asicType
+        type: report.type
       }));
 
       res.json({
@@ -375,7 +375,7 @@ app.get('/reports/:id', async (req, res) => {
           id: report.reportId,
           uuid: report.uuid,
           abn: report.abn,
-          asicType: report.asicType
+          type: report.type
         }
       });
 
@@ -523,12 +523,22 @@ app.get('/health', (req, res) => {
 // Report Creation endpoint (without payment)
 app.post('/api/create-report', async (req, res) => {
   try {
-    const { business, asicType, userId, matterId } = req.body;
+    const { business, type, userId, matterId } = req.body;
 
-    if (!business || !asicType || !userId) {
+    if (!business || !type || !userId) {
       return res.status(400).json({
         error: 'MISSING_PARAMETERS',
-        message: 'business, asicType, and userId are required'
+        message: 'business, type, and userId are required'
+      });
+    }
+
+    // Extract ABN for validation
+    const abn = business?.Abn || business?.abn || business?.ABN;
+    
+    if (!abn) {
+      return res.status(400).json({
+        error: 'ABN_NOT_FOUND',
+        message: 'ABN not found in business data'
       });
     }
 
@@ -536,10 +546,10 @@ app.post('/api/create-report', async (req, res) => {
     const paymentRoutes = require('./routes/payment.routes');
     const createReport = paymentRoutes.createReport;
     
-    // Call the existing createReport function
+    // Call the createReport function (it will handle cache checking internally)
     const reportResponse = await createReport({
       business,
-      asicType,
+      type,
       userId,
       paymentIntentId: null, // No payment for direct report creation
       matterId: matterId || null // Include matterId if provided
@@ -547,7 +557,7 @@ app.post('/api/create-report', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Report created successfully',
+      message: reportResponse.fromCache ? 'Report retrieved from cache' : 'Report created successfully',
       report: reportResponse
     });
 

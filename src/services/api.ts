@@ -146,7 +146,9 @@ class ApiService {
   }
 
   async getMatters() {
-    return this.request<{ success: boolean; matters: any[] }>('/api/matters/list');
+    // Add timestamp to prevent caching
+    const timestamp = new Date().getTime();
+    return this.request<{ success: boolean; matters: any[] }>(`/api/matters/list?t=${timestamp}`);
   }
 
   async searchMatters(query: string) {
@@ -213,16 +215,16 @@ class ApiService {
   }
 
   // Payment Methods API
-  async getPaymentMethods() {
+  async getPaymentMethods(userId?: number) {
     try {
-      const user = JSON.parse(localStorage.getItem('user') || '{}');
-      const response = await this.request<{ paymentMethods: any[] }>(`/payment-methods?userId=${user.userId}`, {
+      const user = userId ? { userId } : JSON.parse(localStorage.getItem('user') || '{}');
+      const response = await this.request<{ success: boolean; paymentMethods: any[] }>(`/payment-methods?userId=${user.userId}`, {
         method: 'GET'
       });
-      return response.paymentMethods || [];
+      return response;
     } catch (error) {
       console.error('Error fetching payment methods:', error);
-      return [];
+      throw error;
     }
   }
 

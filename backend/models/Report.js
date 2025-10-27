@@ -19,29 +19,31 @@ const Report = sequelize.define('Report', {
         allowNull: false,
         field: 'abn'
     },
+    type: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        field: 'type'
+    },
     asicType: {
-        type: DataTypes.ENUM('current', 'historical'),
-        allowNull: false,
+        type: DataTypes.STRING,
+        allowNull: true,
         field: 'asic_type'
     },
-    matterId: {
-        type: DataTypes.INTEGER,
+    subType: {
+        type: DataTypes.STRING,
         allowNull: true,
-        references: {
-            model: 'Matters',
-            key: 'matterId'
-        },
-        field: 'matter_id'
+        field: 'sub_type'
     },
-    userId: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        references: {
-            model: 'users',
-            key: 'user_id'
-        },
-        field: 'user_id'
+    createdAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'created_at'
     },
+    updatedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        field: 'updated_at'
+    }
 }, {
     tableName: 'reports',
     timestamps: true,
@@ -50,10 +52,19 @@ const Report = sequelize.define('Report', {
     underscored: true,
     indexes: [
         {
+            fields: ['abn', 'type']
+        },
+        {
             fields: ['uuid']
         },
         {
-            fields: ['user_id', 'matter_id']
+            fields: ['type']
+        },
+        {
+            fields: ['asic_type']
+        },
+        {
+            fields: ['sub_type']
         }
     ]
 });

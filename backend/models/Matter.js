@@ -31,6 +31,16 @@ const Matter = sequelize.define('Matter', {
     type: DataTypes.ENUM('active', 'completed', 'archived'),
     defaultValue: 'active',
     field: 'status'
+  },
+  createdAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'created_at'
+  },
+  updatedAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'updated_at'
   }
 }, {
   tableName: 'matters',

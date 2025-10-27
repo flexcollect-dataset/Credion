@@ -96,35 +96,34 @@ const ExistingMatter: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      <div className="max-w-4xl mx-auto px-8 py-16">
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-6xl mx-auto px-6 py-6">
         {/* Header */}
-        <div className="text-center mb-12">
-          <button
-            onClick={() => navigate('/matter-selection')}
-            className="flex items-center text-gray-600 hover:text-red-600 transition-colors duration-300 mb-6"
-          >
-            <ArrowLeft className="w-5 h-5 mr-2" />
-            Back to Matter Selection
-          </button>
-          
-          <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Search className="w-8 h-8 text-blue-600" />
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => navigate('/matter-selection')}
+              className="flex items-center text-gray-600 hover:text-red-600 transition-colors duration-200"
+            >
+              <ArrowLeft className="w-4 h-4 mr-1" />
+              Back
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Select Existing Matter</h1>
+              <p className="text-sm text-gray-600 mt-1">
+                Choose from your existing matters to continue working
+              </p>
+            </div>
           </div>
-          
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">Select Existing Matter</h1>
-          <p className="text-gray-600">
-            Choose from your existing matters to continue working
-          </p>
         </div>
 
         {/* Search */}
-        <div className="card mb-8">
+        <div className="bg-white rounded-lg border border-gray-200 mb-6">
           <div className="relative">
-            <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <input
               type="text"
-              className="search-input pl-12"
+              className="w-full px-10 py-3 border-0 rounded-lg focus:outline-none focus:ring-0"
               placeholder="Search matters by name or description..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -134,16 +133,16 @@ const ExistingMatter: React.FC = () => {
 
         {/* Error Message */}
         {error && (
-          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-8">
-            <p className="text-red-600 text-sm">{error}</p>
+          <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+            <p className="text-red-600 text-xs">{error}</p>
           </div>
         )}
 
         {/* Loading State */}
         {isSearching && (
-          <div className="text-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-red-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Loading matters...</p>
+          <div className="text-center py-6">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-red-600 mx-auto mb-3"></div>
+            <p className="text-gray-600 text-sm">Loading matters...</p>
           </div>
         )}
 
@@ -151,12 +150,12 @@ const ExistingMatter: React.FC = () => {
         {!isSearching && (
           <>
             {filteredMatters.length === 0 ? (
-              <div className="card text-center py-12">
-                <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              <div className="bg-white rounded-lg border border-gray-200 text-center py-8">
+                <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
                   {matters.length === 0 ? 'No Matters Found' : 'No Matching Matters'}
                 </h3>
-                <p className="text-gray-600 mb-6">
+                <p className="text-gray-600 text-sm mb-4">
                   {matters.length === 0 
                     ? "You haven't created any matters yet. Create your first matter to get started."
                     : "Try adjusting your search terms or create a new matter."
@@ -165,56 +164,58 @@ const ExistingMatter: React.FC = () => {
                 {matters.length === 0 && (
                   <button
                     onClick={() => navigate('/new-matter')}
-                    className="bg-red-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-red-700 transition-colors duration-300"
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-700 transition-colors duration-200"
                   >
                     Create Your First Matter
                   </button>
                 )}
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {filteredMatters.map((matter) => (
                   <div
                     key={matter.matterId}
-                    className="card hover:shadow-lg transition-all duration-300 cursor-pointer group"
+                    className="bg-white rounded-lg border border-gray-200 hover:shadow-md transition-all duration-200 cursor-pointer group"
                     onClick={() => handleMatterSelect(matter)}
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center mb-2">
-                          <h3 className="text-lg font-semibold text-gray-900 group-hover:text-red-600 transition-colors duration-300">
-                            {matter.matterName}
-                          </h3>
-                          <span className={`ml-3 px-2 py-1 rounded-full text-xs font-medium ${
-                            matter.status === 'active' 
-                              ? 'bg-green-100 text-green-800' 
-                              : matter.status === 'completed'
-                              ? 'bg-blue-100 text-blue-800'
-                              : 'bg-gray-100 text-gray-800'
-                          }`}>
-                            {matter.status}
-                          </span>
+                    <div className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center mb-2">
+                            <h3 className="text-base font-semibold text-gray-900 group-hover:text-red-600 transition-colors duration-200">
+                              {matter.matterName}
+                            </h3>
+                            <span className={`ml-2 px-2 py-0.5 rounded-full text-xs font-medium ${
+                              matter.status === 'active' 
+                                ? 'bg-green-100 text-green-800' 
+                                : matter.status === 'completed'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-gray-100 text-gray-800'
+                            }`}>
+                              {matter.status}
+                            </span>
+                          </div>
+                          
+                          {matter.description && (
+                            <p className="text-gray-600 text-xs mb-2 line-clamp-1">
+                              {matter.description}
+                            </p>
+                          )}
+                          
+                          <div className="flex items-center space-x-4 text-xs text-gray-500">
+                            <div className="flex items-center">
+                              <Calendar className="w-3 h-3 mr-1" />
+                              Created {formatDate(matter.createdAt)}
+                            </div>
+                            <div className="flex items-center">
+                              <FileText className="w-3 h-3 mr-1" />
+                              {matter.reportCount} report{matter.reportCount !== 1 ? 's' : ''}
+                            </div>
+                          </div>
                         </div>
                         
-                        {matter.description && (
-                          <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                            {matter.description}
-                          </p>
-                        )}
-                        
-                        <div className="flex items-center space-x-6 text-sm text-gray-500">
-                          <div className="flex items-center">
-                            <Calendar className="w-4 h-4 mr-1" />
-                            Created {formatDate(matter.createdAt)}
-                          </div>
-                          <div className="flex items-center">
-                            <FileText className="w-4 h-4 mr-1" />
-                            {matter.reportCount} report{matter.reportCount !== 1 ? 's' : ''}
-                          </div>
-                        </div>
+                        <ArrowRight className="w-4 h-4 text-gray-400 group-hover:text-red-600 group-hover:translate-x-1 transition-all duration-200" />
                       </div>
-                      
-                      <ArrowRight className="w-5 h-5 text-gray-400 group-hover:text-red-600 group-hover:translate-x-1 transition-all duration-300" />
                     </div>
                   </div>
                 ))}
@@ -225,10 +226,10 @@ const ExistingMatter: React.FC = () => {
 
         {/* Create New Matter Button */}
         {!isSearching && matters.length > 0 && (
-          <div className="text-center mt-8">
+          <div className="text-center mt-6">
             <button
               onClick={() => navigate('/new-matter')}
-              className="bg-gray-100 text-gray-700 px-6 py-3 rounded-lg font-semibold hover:bg-gray-200 transition-colors duration-300"
+              className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-200 transition-colors duration-200"
             >
               Create New Matter Instead
             </button>
