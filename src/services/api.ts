@@ -68,7 +68,12 @@ class ApiService {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || 'An error occurred');
+        console.error('API Error Response:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: data
+        });
+        throw new Error(data.message || data.error || 'An error occurred');
       }
 
       return data;
@@ -131,6 +136,44 @@ class ApiService {
   }
 
 
+
+  // Matter API methods
+  async createMatter(data: { matterName: string; description?: string | null }) {
+    return this.request<{ success: boolean; message: string; matter: any }>('/api/matters/create', {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async getMatters() {
+    return this.request<{ success: boolean; matters: any[] }>('/api/matters/list');
+  }
+
+  async searchMatters(query: string) {
+    return this.request<{ success: boolean; matters: any[] }>(`/api/matters/search?query=${encodeURIComponent(query)}`);
+  }
+
+  async getMatter(matterId: number) {
+    return this.request<{ success: boolean; matter: any }>(`/api/matters/${matterId}`);
+  }
+
+  async updateMatter(matterId: number, data: { matterName?: string; description?: string; status?: string }) {
+    return this.request<{ success: boolean; message: string; matter: any }>(`/api/matters/${matterId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data)
+    });
+  }
+
+  async deleteMatter(matterId: number) {
+    return this.request<{ success: boolean; message: string }>(`/api/matters/${matterId}`, {
+      method: 'DELETE'
+    });
+  }
+
+  // UserReport API methods
+  async getUserReportsByMatter(matterId: number) {
+    return this.request<{ success: boolean; reports: any[] }>(`/api/userreports/matter/${matterId}`);
+  }
 
   // Search functionality - Direct call to Australian Business Register API
   async searchABNByName(searchTerm: string): Promise<{ success: boolean; results: any[] }> {
@@ -236,6 +279,22 @@ class ApiService {
 
   async getReportDetails(reportId: number): Promise<any> {
     return this.request(`/reports/${reportId}`);
+  }
+
+  // Report Creation API
+  async createReport(reportData: any): Promise<any> {
+    return this.request('/api/create-report', {
+      method: 'POST',
+      body: JSON.stringify(reportData),
+    });
+  }
+
+  // Send Reports via Email API
+  async sendReports(email: string, reports: any[], totalPrice: number): Promise<any> {
+    return this.request('/api/send-reports', {
+      method: 'POST',
+      body: JSON.stringify({ email, reports, totalPrice }),
+    });
   }
 
   // PDF Generation API

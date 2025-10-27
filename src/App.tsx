@@ -16,6 +16,12 @@ import PaymentMethods from './pages/PaymentMethods';
 import Profile from './pages/Profile';
 import Government from './pages/Government';
 import UserProfile from './pages/UserProfile';
+import Search from './pages/Search';
+import MatterSelection from './pages/MatterSelection';
+import NewMatter from './pages/NewMatter';
+import ExistingMatter from './pages/ExistingMatter';
+import MyMatters from './pages/MyMatters';
+import MatterReports from './pages/MatterReports';
 
 function App() {
   return (
@@ -37,9 +43,15 @@ function App() {
             <Route path="/profile" element={<Profile />} />
             <Route path="/payment-method" element={<PaymentMethod />} />
             <Route path="/payment-methods" element={<PaymentMethods />} />
-            <Route path="/government" element={<Government />} />
-            <Route path="/user-profile" element={<UserProfile />} />
-          </Routes>
+                  <Route path="/government" element={<Government />} />
+                  <Route path="/user-profile" element={<UserProfile />} />
+                  <Route path="/search" element={<Search />} />
+                  <Route path="/matter-selection" element={<MatterSelection />} />
+                  <Route path="/new-matter" element={<NewMatter />} />
+                  <Route path="/existing-matter" element={<ExistingMatter />} />
+                  <Route path="/my-matters" element={<MyMatters />} />
+                  <Route path="/matter-reports/:matterId" element={<MatterReports />} />
+                </Routes>
         </main>
         <Footer />
       </div>

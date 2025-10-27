@@ -22,6 +22,8 @@ const Insolvency = require('./Insolvency');
 const InsolvencyParty = require('./InsolvencyParty');
 const Licence = require('./Licence');
 const AsicDocument = require('./AsicDocument');
+const Matter = require('./Matter');
+const UserReport = require('./UserReport');
 
 // Define associations
 User.hasMany(UserPaymentMethod, { 
@@ -33,6 +35,20 @@ UserPaymentMethod.belongsTo(User, {
     foreignKey: 'user_id', 
     as: 'user' 
 });
+
+// Matter associations
+User.hasMany(Matter, { foreignKey: 'user_id', as: 'matters', onDelete: 'CASCADE' });
+Matter.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+
+// UserReport associations
+User.hasMany(UserReport, { foreignKey: 'user_id', as: 'userReports', onDelete: 'CASCADE' });
+UserReport.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
+Matter.hasMany(UserReport, { foreignKey: 'matter_id', as: 'userReports', onDelete: 'CASCADE' });
+UserReport.belongsTo(Matter, { foreignKey: 'matter_id', as: 'matter' });
+
+// Report associations - User only (no Matter link for now)
+User.hasMany(Report, { foreignKey: 'user_id', as: 'reports', onDelete: 'CASCADE' });
+Report.belongsTo(User, { foreignKey: 'user_id', as: 'user' });
 
 // Report associations (removed user_id foreign key)
 
@@ -119,6 +135,8 @@ module.exports = {
     Insolvency,
     InsolvencyParty,
     Licence,
-    AsicDocument
+    AsicDocument,
+    Matter,
+    UserReport
 };
 

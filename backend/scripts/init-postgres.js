@@ -1,4 +1,4 @@
-const { sequelize, User, RefreshToken, PasswordResetToken, UserPaymentMethod } = require('../models');
+const { sequelize, User, RefreshToken, PasswordResetToken, UserPaymentMethod, Matter, Report } = require('../models');
 
 async function initDatabase() {
     try {
@@ -23,6 +23,12 @@ async function initDatabase() {
         
         await UserPaymentMethod.sync({ alter: true });
         console.log('✅ UserPaymentMethods table created/synced');
+        
+        await Matter.sync({ alter: true });
+        console.log('✅ Matters table created/synced');
+        
+        await Report.sync({ alter: false });
+        console.log('✅ Reports table created/synced');
 
         console.log('✅ All tables created/synced successfully!');
         console.log('\n📊 Database Schema:');
@@ -30,6 +36,8 @@ async function initDatabase() {
         console.log('  - refresh_tokens');
         console.log('  - password_reset_tokens');
         console.log('  - user_payment_methods');
+        console.log('  - Matters');
+        console.log('  - Reports');
         
         process.exit(0);
     } catch (error) {

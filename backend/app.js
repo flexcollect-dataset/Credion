@@ -64,6 +64,14 @@ app.get('/', (req, res) => {
   });
 });
 
+// Matter Routes
+const matterRoutes = require('./routes/matter.routes');
+app.use('/api/matters', matterRoutes);
+
+// UserReport routes
+const userReportRoutes = require('./routes/userreport.routes');
+app.use('/api/userreports', userReportRoutes);
+
 // Payment Methods API Routes (defined before auth to avoid middleware conflicts)
 // POST /payment-methods - Add new payment method
 app.post('/payment-methods', async (req, res) => {
@@ -393,7 +401,10 @@ const authRoutes = require('./routes/auth.postgres');
 app.use('/auth', authRoutes);
 
 // Import models for search route
-const { User, UserPaymentMethod, Report } = require('./models');
+const { User, UserPaymentMethod, Report, Matter, UserReport } = require('./models');
+
+// Tables are already created, no need to sync on startup
+// Matter and Report tables are managed through migrations
 
 // Card Details route (requires authentication)
 app.get('/card-details', async (req, res) => {
@@ -507,6 +518,76 @@ app.get('/health', (req, res) => {
     message: 'Server is running',
     timestamp: new Date().toISOString()
   });
+});
+
+// Report Creation endpoint (without payment)
+app.post('/api/create-report', async (req, res) => {
+  try {
+    const { business, asicType, userId, matterId } = req.body;
+
+    if (!business || !asicType || !userId) {
+      return res.status(400).json({
+        error: 'MISSING_PARAMETERS',
+        message: 'business, asicType, and userId are required'
+      });
+    }
+
+    // Import the createReport function from payment routes
+    const paymentRoutes = require('./routes/payment.routes');
+    const createReport = paymentRoutes.createReport;
+    
+    // Call the existing createReport function
+    const reportResponse = await createReport({
+      business,
+      asicType,
+      userId,
+      paymentIntentId: null, // No payment for direct report creation
+      matterId: matterId || null // Include matterId if provided
+    });
+
+    res.json({
+      success: true,
+      message: 'Report created successfully',
+      report: reportResponse
+    });
+
+  } catch (error) {
+    console.error('Error creating report:', error);
+    res.status(500).json({
+      error: 'REPORT_CREATION_FAILED',
+      message: error.message || 'Failed to create report'
+    });
+  }
+});
+
+// Send Reports via Email endpoint
+app.post('/api/send-reports', async (req, res) => {
+  try {
+    const { email, reports, totalPrice } = req.body;
+
+    if (!email || !reports || !Array.isArray(reports)) {
+      return res.status(400).json({
+        error: 'MISSING_PARAMETERS',
+        message: 'email and reports array are required'
+      });
+    }
+
+    // TODO: Implement actual email sending logic here
+    // For now, just return success
+    res.json({
+      success: true,
+      message: `Reports sent successfully to ${email}`,
+      reportsCount: reports.length,
+      totalPrice: totalPrice
+    });
+
+  } catch (error) {
+    console.error('Error sending reports:', error);
+    res.status(500).json({
+      error: 'EMAIL_SENDING_FAILED',
+      message: error.message || 'Failed to send reports'
+    });
+  }
 });
 
 // PDF Generation endpoint

@@ -607,7 +607,7 @@ async function parseAndStoreReportData(reportId, reportData) {
 }
 
 // Function to create report via external API
-async function createReport({ business, asicType, userId, paymentIntentId }) {
+async function createReport({ business, asicType, userId, paymentIntentId, matterId }) {
     try {
         const apiUrl = 'https://alares.com.au/api/reports/create';
         const bearerToken = 'pIIDIt6acqekKFZ9a7G4w4hEoFDqCSMfF6CNjx5lCUnB6OF22nnQgGkEWGhv';
@@ -663,7 +663,9 @@ async function createReport({ business, asicType, userId, paymentIntentId }) {
         const savedReport = await Report.create({
             uuid: createResponse.data.uuid,
             abn: abn,
-            asicType: asicType
+            asicType: asicType,
+            userId: userId,
+            matterId: matterId || null
         });
         
         console.log('Report data saved to database:', savedReport.reportId);
@@ -1234,4 +1236,5 @@ router.post('/create-payment-intent', authenticateSession, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.createReport = createReport;
 
