@@ -624,11 +624,11 @@ const pdfGenerator = require('./services/pdfGenerator');
              });
            }
 
-           // Only allow ASIC reports for now
-           if (reportType !== 'ASIC') {
+           // Allow ASIC and COURT reports
+           if (reportType !== 'ASIC' && reportType !== 'COURT') {
              return res.status(400).json({
                error: 'INVALID_REPORT_TYPE',
-               message: 'Only ASIC reports are currently supported'
+               message: 'Only ASIC and COURT reports are currently supported'
              });
            }
 
@@ -648,14 +648,20 @@ const pdfGenerator = require('./services/pdfGenerator');
            // Generate report data
            const reportData = await pdfGenerator.generateReportData(report, reportType);
 
-           // Generate PDF
-           const pdfBuffer = await pdfGenerator.generatePDF('asic-report', reportData);
+           // Generate PDF with correct template
+           const templateName = reportType === 'ASIC' ? 'asic-report' : 'court-report';
+           const pdfBuffer = await pdfGenerator.generatePDF(templateName, reportData);
 
-           // Generate filename in format: ABN_NAME_ASIC_Current or ABN_NAME_ASIC_Historical
+           // Generate filename based on report type
            const companyName = reportData.companyName || 'Unknown';
            const abn = reportData.abn || 'Unknown';
-           const reportTypeFormatted = reportType === 'ASIC' ? 'Current' : 'Historical';
-           const filename = `${abn}_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_ASIC_${reportTypeFormatted}.pdf`;
+           let filename;
+           if (reportType === 'ASIC') {
+             const reportTypeFormatted = 'Current'; // Default to Current for ASIC
+             filename = `${abn}_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_ASIC_${reportTypeFormatted}.pdf`;
+           } else {
+             filename = `${abn}_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_COURT.pdf`;
+           }
 
            // Set response headers for PDF download
            res.setHeader('Content-Type', 'application/pdf');

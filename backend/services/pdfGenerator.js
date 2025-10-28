@@ -90,10 +90,16 @@ class PDFGenerator {
         try {
             console.log('Report object:', report);
             console.log('Report ID:', report.reportId || report.id);
+            console.log('Report Type:', reportType);
             
             // Use the report ID from the report object - use reportId field first, then id
             const reportId = report.reportId || report.id;
             console.log('🔍 Using Report ID for queries:', reportId);
+
+            // Handle COURT reports differently
+            if (reportType === 'COURT') {
+                return await this.generateCourtReportData(report, reportId, sequelize);
+            }
             
             // Get entity data using the correct report ID
             const [entities] = await sequelize.query(`
@@ -538,6 +544,251 @@ class PDFGenerator {
             };
         } finally {
             // Don't close the shared connection
+        }
+    }
+
+    // Generate court report data
+    async generateCourtReportData(report, reportId, sequelize) {
+        try {
+            console.log('🏛️ Generating COURT report data for report ID:', reportId);
+            
+            // Get entity data (company name, ACN, ABN)
+            const [entities] = await sequelize.query(`
+                SELECT * FROM entities 
+                WHERE report_id = ${reportId} 
+                LIMIT 1
+            `);
+            
+            console.log('🔍 Court Report - Entities found:', entities.length);
+            const entity = entities[0] || {};
+            
+            // Get cases data
+            const [cases] = await sequelize.query(`
+                SELECT * FROM cases 
+                WHERE report_id = ${reportId}
+                ORDER BY notification_time DESC
+            `);
+            
+            console.log('🔍 Court Report - Cases found:', cases.length);
+            const caseData = cases[0] || {}; // Use the first case for now
+            
+            // Get case parties
+            const [caseParties] = await sequelize.query(`
+                SELECT * FROM case_parties 
+                WHERE report_id = ${reportId}
+                ORDER BY created_at DESC
+            `);
+            console.log('🔍 Court Report - Case Parties found:', caseParties.length);
+            
+            // Get case documents
+            const [caseDocuments] = await sequelize.query(`
+                SELECT * FROM case_documents 
+                WHERE report_id = ${reportId}
+                ORDER BY datetime DESC
+            `);
+            console.log('🔍 Court Report - Case Documents found:', caseDocuments.length);
+            
+            // Get case hearings
+            const [caseHearings] = await sequelize.query(`
+                SELECT * FROM case_hearings 
+                WHERE report_id = ${reportId}
+                ORDER BY datetime DESC
+            `);
+            console.log('🔍 Court Report - Case Hearings found:', caseHearings.length);
+            
+            // Get case judgments
+            const [caseJudgments] = await sequelize.query(`
+                SELECT * FROM case_judgments 
+                WHERE report_id = ${reportId}
+                ORDER BY date DESC
+            `);
+            console.log('🔍 Court Report - Case Judgments found:', caseJudgments.length);
+            
+            // Get case applications
+            const [caseApplications] = await sequelize.query(`
+                SELECT * FROM case_applications 
+                WHERE report_id = ${reportId}
+                ORDER BY date_filed DESC
+            `);
+            console.log('🔍 Court Report - Case Applications found:', caseApplications.length);
+            
+            // Get insolvencies data
+            const [insolvencies] = await sequelize.query(`
+                SELECT * FROM insolvencies 
+                WHERE report_id = ${reportId}
+                ORDER BY notification_time DESC
+            `);
+            console.log('🔍 Court Report - Insolvencies found:', insolvencies.length);
+            const insolvencyData = insolvencies[0] || {};
+            
+            // Get insolvency parties
+            const [insolvencyParties] = await sequelize.query(`
+                SELECT * FROM insolvency_parties 
+                WHERE report_id = ${reportId}
+                ORDER BY created_at DESC
+            `);
+            console.log('🔍 Court Report - Insolvency Parties found:', insolvencyParties.length);
+            
+            // Helper function to format dates as DD-MM-YYYY
+            const formatDate = (dateString) => {
+                if (!dateString) return 'N/A';
+                try {
+                    const date = new Date(dateString);
+                    const day = date.getDate().toString().padStart(2, '0');
+                    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                    const year = date.getFullYear();
+                    return `${day}-${month}-${year}`;
+                } catch (error) {
+                    return 'N/A';
+                }
+            };
+
+            const courtReportData = {
+                // Report Information
+                reportId: reportId,
+                generatedDate: new Date().toLocaleDateString('en-AU', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                }),
+                searchKey: report.searchKey || 'N/A',
+                
+                // Company Information from entities table
+                companyName: entity.name || 'Company Name Not Available',
+                abn: entity.abn || report.abn || 'N/A',
+                acn: entity.acn || 'N/A',
+                
+                // Case Information
+                caseNumber: caseData.case_number || 'N/A',
+                caseName: caseData.case_name || 'N/A',
+                courtName: caseData.court_name || 'N/A',
+                courtType: caseData.court_type || 'N/A',
+                caseType: caseData.case_type || 'N/A',
+                jurisdiction: caseData.jurisdiction || 'N/A',
+                state: caseData.state || 'N/A',
+                suburb: caseData.suburb || 'N/A',
+                
+                // Parties Information
+                totalParties: caseData.total_parties || 'N/A',
+                name: caseData.name || 'N/A',
+                otherNames: caseData.other_names || 'N/A',
+                
+                // Case Details
+                notificationTime: caseData.notification_time ? 
+                    formatDate(caseData.notification_time) : 'N/A',
+                nextHearingDate: caseData.next_hearing_date ? 
+                    formatDate(caseData.next_hearing_date) : 'N/A',
+                totalDocuments: caseData.total_documents || 'N/A',
+                totalHearings: caseData.total_hearings || 'N/A',
+                internalReference: caseData.internal_reference || 'N/A',
+                insolvencyRiskFactor: caseData.insolvency_risk_factor || 'N/A',
+                matchOn: caseData.match_on || 'N/A',
+                
+                // Case Parties Data
+                caseParties: caseParties.map(party => ({
+                    ...party,
+                    datetime: party.datetime ? formatDate(party.datetime) : 'N/A'
+                })),
+                
+                // Case Documents Data
+                caseDocuments: caseDocuments.map(doc => ({
+                    ...doc,
+                    datetime: doc.datetime ? formatDate(doc.datetime) : 'N/A',
+                    time: doc.datetime ? new Date(doc.datetime).toLocaleTimeString('en-AU', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    }) : 'N/A'
+                })),
+                
+                // Case Hearings Data
+                caseHearings: caseHearings.map(hearing => ({
+                    ...hearing,
+                    datetime: hearing.datetime ? formatDate(hearing.datetime) : 'N/A',
+                    time: hearing.datetime ? new Date(hearing.datetime).toLocaleTimeString('en-AU', {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    }) : 'N/A'
+                })),
+                
+                // Case Judgments Data
+                caseJudgments: caseJudgments.map(judgment => ({
+                    ...judgment,
+                    date: judgment.date ? formatDate(judgment.date) : 'N/A'
+                })),
+                
+                // Case Applications Data
+                caseApplications: caseApplications.map(app => ({
+                    ...app,
+                    dateFiled: app.date_filed ? formatDate(app.date_filed) : 'N/A',
+                    dateFinalised: app.date_finalised ? formatDate(app.date_finalised) : 'N/A'
+                })),
+                
+                // Insolvency Data
+                insolvencyData: {
+                    ...insolvencyData,
+                    notificationTime: insolvencyData.notification_time ? 
+                        formatDate(insolvencyData.notification_time) : 'N/A'
+                },
+                
+                // Insolvency Parties Data
+                insolvencyParties: insolvencyParties.map(party => ({
+                    ...party,
+                    datetime: party.datetime ? formatDate(party.datetime) : 'N/A'
+                })),
+                
+                // Summary counts
+                totalCaseParties: caseParties.length,
+                totalCaseDocuments: caseDocuments.length,
+                totalCaseHearings: caseHearings.length,
+                totalCaseJudgments: caseJudgments.length,
+                totalCaseApplications: caseApplications.length,
+                totalInsolvencies: insolvencies.length,
+                totalInsolvencyParties: insolvencyParties.length
+            };
+
+            console.log('🔍 Court Report Data:', {
+                companyName: courtReportData.companyName,
+                abn: courtReportData.abn,
+                acn: courtReportData.acn,
+                caseNumber: courtReportData.caseNumber,
+                caseName: courtReportData.caseName
+            });
+
+            return courtReportData;
+            
+        } catch (error) {
+            console.error('Error generating court report data:', error);
+            // Return basic data if database query fails
+            return {
+                reportId: reportId,
+                generatedDate: new Date().toLocaleDateString('en-AU'),
+                searchKey: 'N/A',
+                companyName: 'Company Name Not Available',
+                abn: 'N/A',
+                acn: 'N/A',
+                caseNumber: 'N/A',
+                caseName: 'N/A',
+                courtName: 'N/A',
+                courtType: 'N/A',
+                caseType: 'N/A',
+                jurisdiction: 'N/A',
+                state: 'N/A',
+                suburb: 'N/A',
+                totalParties: 'N/A',
+                name: 'N/A',
+                otherNames: 'N/A',
+                notificationTime: 'N/A',
+                nextHearingDate: 'N/A',
+                totalDocuments: 'N/A',
+                totalHearings: 'N/A',
+                internalReference: 'N/A',
+                insolvencyRiskFactor: 'N/A',
+                matchOn: 'N/A'
+            };
         }
     }
 }

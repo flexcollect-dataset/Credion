@@ -84,14 +84,12 @@ const UserProfile = () => {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const response = await apiService.getReports();
-      console.log('Reports API response:', response);
+      const response = await apiService.getUserReports();
+      console.log('User Reports API response:', response);
       
       // Ensure we have an array of reports
-      if (Array.isArray(response)) {
-        setReports(response);
-      } else if (response && typeof response === 'object' && 'reports' in response && Array.isArray((response as any).reports)) {
-        setReports((response as any).reports);
+      if (response && response.success && Array.isArray(response.reports)) {
+        setReports(response.reports);
       } else {
         console.warn('Unexpected reports data format:', response);
         setReports([]);

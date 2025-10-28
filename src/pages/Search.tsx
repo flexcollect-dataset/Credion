@@ -403,7 +403,8 @@ const Search: React.FC = () => {
         const reportData = {
           business: {
             Abn: selectedOrg.abn.replace('ABN: ', ''),
-            Name: selectedOrg.name
+            Name: selectedOrg.name,
+            isCompany: selectedCategory === 'organisation'
           },
           type: reportType,
           userId: JSON.parse(localStorage.getItem('user') || '{}').userId,
@@ -491,6 +492,34 @@ const Search: React.FC = () => {
     }
   };
 
+  // Calculate actual number of reports that will be generated
+  const getActualReportCount = () => {
+    if (selectedCategory === 'organisation') {
+      let count = 0;
+      
+      // Count main searches (but exclude ASIC if ASIC types are selected)
+      selectedOrgMainSearches.forEach(search => {
+        if (search === 'asic' && selectedAsicTypes.length > 0) {
+          // Don't count generic ASIC if specific types are selected
+        } else {
+          count++;
+        }
+      });
+      
+      // Count ASIC types
+      if (selectedOrgMainSearches.includes('asic')) {
+        count += selectedAsicTypes.length;
+      }
+      
+      // Count additional searches
+      count += selectedOrgAdditionalSearches.length;
+      
+      return count;
+    } else {
+      return selectedIndividualSearches.length;
+    }
+  };
+
   // Filter dropdown items based on search input
   const filteredDropdownItems = dropdownItems.filter(item =>
     item.name.toLowerCase().includes(searchInput.toLowerCase())
@@ -507,32 +536,8 @@ const Search: React.FC = () => {
         </div>
       ) : (
         <>
-          {/* Matter Context Banner */}
-          {currentMatter && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-8">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-semibold text-blue-900">Current Matter</h3>
-                  <p className="text-blue-700 text-sm">{currentMatter.matterName}</p>
-                  {currentMatter.description && (
-                    <p className="text-blue-600 text-xs mt-1">{currentMatter.description}</p>
-                  )}
-                </div>
-                <button
-                  onClick={() => {
-                    localStorage.removeItem('currentMatter');
-                    window.location.href = '/matter-selection';
-                  }}
-                  className="text-blue-600 hover:text-blue-800 text-sm font-medium"
-                >
-                  Change Matter
-                </button>
-              </div>
-            </div>
-          )}
-
           {/* Main Content */}
-          <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-16 lg:mr-96">
+          <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-8 lg:mr-96">
         {/* Category Selection */}
         <div className="card">
           <h2 className="section-title">Select <span>Category</span></h2>
@@ -835,9 +840,13 @@ const Search: React.FC = () => {
               <div className="selected-section">
                 <div className="selected-label">Selected Searches:</div>
                 <div className="selected-tags">
-                  {selectedOrgMainSearches.map(search => (
-                    <span key={search} className="tag">{search.toUpperCase()}</span>
-                  ))}
+                  {selectedOrgMainSearches.map(search => {
+                    // If ASIC is selected but ASIC types are also selected, don't show generic ASIC
+                    if (search === 'asic' && selectedAsicTypes.length > 0) {
+                      return null;
+                    }
+                    return <span key={search} className="tag">{search.toUpperCase()}</span>;
+                  })}
                   {selectedOrgMainSearches.includes('asic') && selectedAsicTypes.map(type => (
                     <span key={type} className="tag">ASIC - {type.toUpperCase()}</span>
                   ))}
@@ -876,7 +885,7 @@ const Search: React.FC = () => {
                     <div className="action-box">
                       <h3>Download Report</h3>
                       <div className="reports-available">
-                        Reports available: <span>{receiptItems.length}</span>
+                        Reports available: <span>{getActualReportCount()}</span>
                       </div>
                       <button className="action-button download-button" onClick={handleDownload}>
                         Download
@@ -1006,7 +1015,7 @@ const Search: React.FC = () => {
                   <div className="action-box">
                     <h3>Download Report</h3>
                     <div className="reports-available">
-                      Reports available: <span>{receiptItems.length}</span>
+                      Reports available: <span>{getActualReportCount()}</span>
                     </div>
                     <button className="action-button download-button" onClick={handleDownload}>
                       Download

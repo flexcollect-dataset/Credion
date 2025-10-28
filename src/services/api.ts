@@ -173,6 +173,10 @@ class ApiService {
   }
 
   // UserReport API methods
+  async getUserReports() {
+    return this.request<{ success: boolean; reports: any[] }>('/api/userreports');
+  }
+
   async getUserReportsByMatter(matterId: number) {
     return this.request<{ success: boolean; reports: any[] }>(`/api/userreports/matter/${matterId}`);
   }
