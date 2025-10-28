@@ -42,12 +42,12 @@ router.get('/', async (req, res) => {
     res.json({
       success: true,
       reports: reports.map(report => ({
-        reportId: report.reportId,
+        id: report.id,
         userId: report.userId,
         matterId: report.matterId,
         reportName: report.reportName,
         isPaid: report.isPaid,
-        type: report.type,
+        reportId: report.reportId,
         createdAt: report.createdAt,
         updatedAt: report.updatedAt
       }))
@@ -79,12 +79,12 @@ router.get('/matter/:matterId', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       reports: reports.map(report => ({
-        reportId: report.reportId,
+        id: report.id,
         userId: report.userId,
         matterId: report.matterId,
         reportName: report.reportName,
         isPaid: report.isPaid,
-        type: report.type,
+        reportId: report.reportId,
         createdAt: report.createdAt,
         updatedAt: report.updatedAt
       }))

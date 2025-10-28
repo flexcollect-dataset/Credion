@@ -2,24 +2,15 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
 
 const UserReport = sequelize.define('UserReport', {
-    reportId: {
+    id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true,
-        field: 'report_id'
-    },
-    reportReferenceId: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        references: {
-            model: 'reports',
-            key: 'report_id'
-        },
-        field: 'report_reference_id'
+        field: 'id'
     },
     userId: {
         type: DataTypes.INTEGER,
-        allowNull: true,
+        allowNull: false,
         references: {
             model: 'users',
             key: 'user_id'
@@ -30,35 +21,30 @@ const UserReport = sequelize.define('UserReport', {
         type: DataTypes.INTEGER,
         allowNull: true,
         references: {
-            model: 'Matters',
-            key: 'matterId'
+            model: 'matters',
+            key: 'matter_id'
         },
         field: 'matter_id'
     },
     reportName: {
-        type: DataTypes.STRING,
+        type: DataTypes.STRING(255),
         allowNull: false,
         field: 'report_name'
     },
     isPaid: {
         type: DataTypes.BOOLEAN,
-        allowNull: true,
+        allowNull: false,
+        defaultValue: true,
         field: 'is_paid'
     },
-    type: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        field: 'type'
-    },
-    asicType: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        field: 'asic_type'
-    },
-    subType: {
-        type: DataTypes.STRING,
-        allowNull: true,
-        field: 'sub_type'
+    reportId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+            model: 'reports',
+            key: 'id'
+        },
+        field: 'report_id'
     },
     createdAt: {
         type: DataTypes.DATE,
@@ -71,7 +57,7 @@ const UserReport = sequelize.define('UserReport', {
         field: 'updated_at'
     }
 }, {
-    tableName: 'userreports',
+    tableName: 'user_reports',
     timestamps: true,
     createdAt: 'created_at',
     updatedAt: 'updated_at',
@@ -84,13 +70,13 @@ const UserReport = sequelize.define('UserReport', {
             fields: ['matter_id']
         },
         {
-            fields: ['type']
+            fields: ['report_id']
         },
         {
-            fields: ['asic_type']
+            fields: ['is_paid']
         },
         {
-            fields: ['sub_type']
+            fields: ['user_id', 'matter_id']
         }
     ]
 });

@@ -2,37 +2,53 @@ const { DataTypes } = require('sequelize');
 const { sequelize } = require('../config/db');
 
 const Report = sequelize.define('Report', {
-    reportId: {
+    id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true,
-        field: 'report_id'
+        field: 'id'
     },
-    uuid: {
-        type: DataTypes.STRING,
+    category: {
+        type: DataTypes.ENUM('personal', 'organization'),
         allowNull: false,
-        unique: true,
-        field: 'uuid'
+        field: 'category'
     },
-    abn: {
-        type: DataTypes.STRING,
+    isCompany: {
+        type: DataTypes.BOOLEAN,
         allowNull: false,
-        field: 'abn'
+        defaultValue: false,
+        field: 'is_company'
     },
     type: {
-        type: DataTypes.STRING,
-        allowNull: true,
+        type: DataTypes.ENUM('ASIC', 'COURT', 'ATO', 'LAND TITLE'),
+        allowNull: false,
         field: 'type'
     },
     asicType: {
-        type: DataTypes.STRING,
+        type: DataTypes.ENUM('Current', 'Historical'),
         allowNull: true,
         field: 'asic_type'
     },
-    subType: {
-        type: DataTypes.STRING,
+    abn: {
+        type: DataTypes.STRING(255),
         allowNull: true,
-        field: 'sub_type'
+        field: 'abn'
+    },
+    searchKey: {
+        type: DataTypes.STRING(500),
+        allowNull: false,
+        field: 'search_key'
+    },
+    uid: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        field: 'uid'
+    },
+    isAlert: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: 'is_alert'
     },
     createdAt: {
         type: DataTypes.DATE,
@@ -52,10 +68,7 @@ const Report = sequelize.define('Report', {
     underscored: true,
     indexes: [
         {
-            fields: ['abn', 'type']
-        },
-        {
-            fields: ['uuid']
+            fields: ['category']
         },
         {
             fields: ['type']
@@ -64,7 +77,13 @@ const Report = sequelize.define('Report', {
             fields: ['asic_type']
         },
         {
-            fields: ['sub_type']
+            fields: ['abn']
+        },
+        {
+            fields: ['uid']
+        },
+        {
+            fields: ['is_alert']
         }
     ]
 });

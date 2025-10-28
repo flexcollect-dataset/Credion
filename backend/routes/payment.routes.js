@@ -37,7 +37,7 @@ async function checkReportCache(abn, type) {
         
         console.log(`   Found ${allReportsForABN.length} total reports for ABN ${abn}:`);
         allReportsForABN.forEach((report, index) => {
-            console.log(`     ${index + 1}. Report ID: ${report.reportId}, Type: ${report.type}, ASIC: ${report.asicType}, Sub: ${report.subType}, Created: ${report.created_at}`);
+            console.log(`     ${index + 1}. Report ID: ${report.id}, Type: ${report.type}, ASIC: ${report.asicType}, Created: ${report.created_at}`);
         });
         
         // Parse the type to get granular fields
@@ -57,9 +57,6 @@ async function checkReportCache(abn, type) {
         }
         if (parsedType.asicType) {
             whereClause.asicType = parsedType.asicType;
-        }
-        if (parsedType.subType) {
-            whereClause.subType = parsedType.subType;
         }
         
         const existingReport = await Report.findOne({
@@ -125,15 +122,42 @@ async function fetchReportData(uuid, bearerToken) {
 }
 
 // Function to parse and store report data in normalized tables
+// Function to parse and store report data in normalized tables
 async function parseAndStoreReportData(reportId, reportData) {
     const { sequelize } = require('../config/db');
     
     try {
-        console.log('📊 Parsing and storing report data for report ID:', reportId);
+        console.log('🚀 NEW CODE VERSION - Parsing and storing report data for report ID:', reportId);
+        
+        // Check if ASIC extract data already exists for this report to prevent duplicates
+        const [existingAsicExtract] = await sequelize.query(`
+            SELECT asic_extract_id FROM asic_extracts WHERE report_id = $1 LIMIT 1
+        `, {
+            bind: [reportId]
+        });
+        
+        if (existingAsicExtract.length > 0) {
+            console.log('⚠️ ASIC extract data already exists for report ID:', reportId, '- skipping duplicate processing');
+            return;
+        }
+        console.log('🔍 REPORT DATA STRUCTURE ANALYSIS:');
+        console.log('   Keys in reportData:', Object.keys(reportData));
+        console.log('   asic_extracts exists:', !!reportData.asic_extracts);
+        console.log('   asic_extracts type:', typeof reportData.asic_extracts);
+        console.log('   asic_extracts is array:', Array.isArray(reportData.asic_extracts));
+        console.log('   asic_extracts length:', reportData.asic_extracts?.length || 0);
+        
+        if (reportData.asic_extracts) {
+            console.log('   asic_extracts sample:', JSON.stringify(reportData.asic_extracts[0], null, 2));
+        }
+        
+        // Log the complete data structure for debugging
+        console.log('🔍 COMPLETE REPORT DATA:', JSON.stringify(reportData, null, 2));
         
         // 1. Store Entity data
         if (reportData.entity) {
             const entityData = reportData.entity;
+            console.log('📝 Storing entity data for report ID:', reportId);
             await sequelize.query(`
                 INSERT INTO entities (
                     report_id, abn, acn, is_arbn, abr_gst_registration_date, 
@@ -148,199 +172,481 @@ async function parseAndStoreReportData(reportId, reportData) {
             `, {
                 bind: [
                     reportId,
-                    entityData.abn,
-                    entityData.acn,
-                    entityData.is_arbn,
-                    entityData.abr_gst_registration_date,
-                    entityData.abr_gst_status,
-                    entityData.abr_postcode,
-                    entityData.abr_state,
-                    entityData.abr_status,
-                    entityData.asic_date_of_registration,
-                    entityData.asic_status,
-                    entityData.document_number,
+                    entityData.abn || null,
+                    entityData.acn || null,
+                    entityData.is_arbn || null,
+                    entityData.abr_gst_registration_date || null,
+                    entityData.abr_gst_status || null,
+                    entityData.abr_postcode || null,
+                    entityData.abr_state || null,
+                    entityData.abr_status || null,
+                    entityData.asic_date_of_registration || null,
+                    entityData.asic_status || null,
+                    entityData.document_number || null,
                     JSON.stringify(entityData.former_names || []),
-                    entityData.name,
-                    entityData.reference,
-                    entityData.review_date,
-                    entityData.name_start_at,
-                    entityData.registered_in,
-                    entityData.organisation_type,
-                    entityData.disclosing_entity,
-                    entityData.organisation_class,
-                    entityData.organisation_sub_class
+                    entityData.name || null,
+                    entityData.reference || null,
+                    entityData.review_date || null,
+                    entityData.name_start_at || null,
+                    entityData.registered_in || null,
+                    entityData.organisation_type || null,
+                    entityData.disclosing_entity || null,
+                    entityData.organisation_class || null,
+                    entityData.organisation_sub_class || null
                 ]
             });
             console.log('✅ Entity data stored');
         }
         
         // 2. Store ASIC Extract data
+        console.log('🔍 DEBUG: Checking asic_extracts data...');
+        console.log('   asic_extracts exists:', !!reportData.asic_extracts);
+        console.log('   asic_extracts is array:', Array.isArray(reportData.asic_extracts));
+        console.log('   asic_extracts length:', reportData.asic_extracts?.length || 0);
+        console.log('   asic_extracts value:', reportData.asic_extracts);
+        
         if (reportData.asic_extracts) {
-            const asicExtract = reportData.asic_extracts;
-            const [asicResult] = await sequelize.query(`
-                INSERT INTO asic_extracts (report_id, external_id) 
-                VALUES ($1, $2) 
-                RETURNING asic_extract_id
-            `, {
-                bind: [reportId, asicExtract.external_id]
-            });
-            
-            const asicExtractId = asicResult[0].asic_extract_id;
-            console.log('✅ ASIC Extract stored with ID:', asicExtractId);
-            
-            // 3. Store Addresses
-            if (asicExtract.addresses && Array.isArray(asicExtract.addresses)) {
-                for (const address of asicExtract.addresses) {
-                    await sequelize.query(`
-                        INSERT INTO addresses (
-                            asic_extract_id, type, entity, address, care_of, address_1, 
-                            address_2, suburb, state, postcode, country, status, 
-                            start_date, end_date, document_number, address_category
-                        ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-                        )
-                    `, {
-                        bind: [
-                            asicExtractId,
-                            address.type,
-                            address.entity,
-                            address.address,
-                            address.care_of,
-                            address.address_1,
-                            address.address_2,
-                            address.suburb,
-                            address.state,
-                            address.postcode,
-                            address.country,
-                            address.status,
-                            address.start_date,
-                            address.end_date,
-                            address.document_number,
-                            'company'
-                        ]
-                    });
-                }
-                console.log('✅ Addresses stored');
-            }
-            
-            // 4. Store Directors
-            if (asicExtract.directors && Array.isArray(asicExtract.directors)) {
-                for (const director of asicExtract.directors) {
-                    await sequelize.query(`
-                        INSERT INTO directors (
-                            asic_extract_id, type, name, dob, place_of_birth, 
-                            director_id_external, document_number, start_date, 
-                            end_date, status, address_data
-                        ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-                        )
-                    `, {
-                        bind: [
-                            asicExtractId,
-                            director.type,
-                            director.name,
-                            director.dob,
-                            director.place_of_birth,
-                            director.director_id_external,
-                            director.document_number,
-                            director.start_date,
-                            director.end_date,
-                            director.status,
-                            director.address ? JSON.stringify(director.address) : null
-                        ]
-                    });
-                }
-                console.log('✅ Directors stored');
-            }
-            
-            // 5. Store Shareholders
-            if (asicExtract.shareholders && Array.isArray(asicExtract.shareholders)) {
-                for (const shareholder of asicExtract.shareholders) {
-                    await sequelize.query(`
-                        INSERT INTO shareholders (
-                            asic_extract_id, name, acn, class, number_held, 
-                            percentage_held, document_number, beneficially_owned, 
-                            fully_paid, jointly_held, status, address_data
-                        ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-                        )
-                    `, {
-                        bind: [
-                            asicExtractId,
-                            shareholder.name,
-                            shareholder.acn,
-                            shareholder.class,
-                            shareholder.number_held,
-                            shareholder.percentage_held,
-                            shareholder.document_number,
-                            shareholder.beneficially_owned,
-                            shareholder.fully_paid,
-                            shareholder.jointly_held,
-                            shareholder.status,
-                            shareholder.address ? JSON.stringify(shareholder.address) : null
-                        ]
-                    });
-                }
-                console.log('✅ Shareholders stored');
-            }
-            
-            // 6. Store Share Structures
-            if (asicExtract.share_structures && Array.isArray(asicExtract.share_structures)) {
-                for (const shareStructure of asicExtract.share_structures) {
-                    await sequelize.query(`
-                        INSERT INTO share_structures (
-                            asic_extract_id, class_code, class_description, status, 
-                            share_count, amount_paid, amount_due, document_number
-                        ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8
-                        )
-                    `, {
-                        bind: [
-                            asicExtractId,
-                            shareStructure.class_code,
-                            shareStructure.class_description,
-                            shareStructure.status,
-                            shareStructure.share_count,
-                            shareStructure.amount_paid,
-                            shareStructure.amount_due,
-                            shareStructure.document_number
-                        ]
-                    });
-                }
-                console.log('✅ Share Structures stored');
-            }
-            
-            // 7. Store Documents
-            if (asicExtract.documents && Array.isArray(asicExtract.documents)) {
-                for (const document of asicExtract.documents) {
-                    await sequelize.query(`
-                        INSERT INTO documents (
-                            asic_extract_id, type, description, document_number, 
-                            form_code, page_count, effective_at, processed_at, received_at
-                        ) VALUES (
-                            $1, $2, $3, $4, $5, $6, $7, $8, $9
-                        )
-                    `, {
-                        bind: [
-                            asicExtractId,
-                            document.type,
-                            document.description,
-                            document.document_number,
-                            document.form_code,
-                            document.page_count,
-                            document.effective_at,
-                            document.processed_at,
-                            document.received_at
-                        ]
-                    });
-                }
-                console.log('✅ Documents stored');
-            }
+            console.log('   asic_extracts sample:', JSON.stringify(reportData.asic_extracts[0], null, 2));
         }
         
-        // 8. Store Tax Debts
-        if (reportData.tax_debt && Array.isArray(reportData.tax_debt)) {
-            for (const taxDebt of reportData.tax_debt) {
+        if (reportData.asic_extracts && Array.isArray(reportData.asic_extracts) && reportData.asic_extracts.length > 0) {
+            console.log('📊 Processing', reportData.asic_extracts.length, 'ASIC extracts...');
+            
+            for (const asicExtract of reportData.asic_extracts) {
+                console.log('   Processing ASIC extract ID:', asicExtract.id);
+                console.log('   ASIC extract keys:', Object.keys(asicExtract));
+                
+                                try {
+                                    const [asicResult] = await sequelize.query(`
+                                        INSERT INTO asic_extracts (report_id, external_id) 
+                                        VALUES ($1, $2) 
+                                        RETURNING asic_extract_id
+                                    `, {
+                                        bind: [reportId, asicExtract.id || null]
+                                    });
+                                    const asicExtractId = asicResult[0].asic_extract_id;
+                                    console.log('✅ ASIC Extract stored with ID:', asicExtractId);
+                    
+                    // 3. Store Addresses
+                    if (asicExtract.addresses && Array.isArray(asicExtract.addresses)) {
+                        console.log('   Storing', asicExtract.addresses.length, 'addresses...');
+                        for (const address of asicExtract.addresses) {
+                            await sequelize.query(`
+                                INSERT INTO addresses (
+                                    asic_extract_id, type, entity, address, care_of, address_1, 
+                                    address_2, suburb, state, postcode, country, status, 
+                                    start_date, end_date, document_number, address_category
+                                ) VALUES (
+                                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+                                )
+                            `, {
+                                bind: [
+                                    asicExtractId,
+                                    address.type || null,
+                                    address.entity || null,
+                                    address.address || null,
+                                    address.care_of || null,
+                                    address.address_1 || null,
+                                    address.address_2 || null,
+                                    address.suburb || null,
+                                    address.state || null,
+                                    address.postcode || null,
+                                    address.country || null,
+                                    address.status || null,
+                                    address.start_date || null,
+                                    address.end_date || null,
+                                    address.document_number || null,
+                                    'company'
+                                ]
+                            });
+                        }
+                        console.log('✅ Addresses stored');
+                    }
+                    
+                    // 3b. Store Contact Addresses
+                    if (asicExtract.contact_addresses && Array.isArray(asicExtract.contact_addresses)) {
+                        console.log('   Storing', asicExtract.contact_addresses.length, 'contact addresses...');
+                        for (const contactAddress of asicExtract.contact_addresses) {
+                            await sequelize.query(`
+                                INSERT INTO addresses (
+                                    asic_extract_id, type, entity, address, care_of, address_1, 
+                                    address_2, suburb, state, postcode, country, status, 
+                                    start_date, end_date, document_number, address_category
+                                ) VALUES (
+                                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+                                )
+                            `, {
+                                bind: [
+                                    asicExtractId,
+                                    contactAddress.type || null,
+                                    contactAddress.entity || null,
+                                    contactAddress.address || null,
+                                    contactAddress.care_of || null,
+                                    contactAddress.address_1 || null,
+                                    contactAddress.address_2 || null,
+                                    contactAddress.suburb || null,
+                                    contactAddress.state || null,
+                                    contactAddress.postcode || null,
+                                    contactAddress.country || null,
+                                    contactAddress.status || null,
+                                    contactAddress.start_date || null,
+                                    contactAddress.end_date || null,
+                                    contactAddress.document_number || null,
+                                    'contact'
+                                ]
+                            });
+                        }
+                        console.log('✅ Contact Addresses stored');
+                    }
+                    
+                    // 4. Store Directors
+                    if (asicExtract.directors && Array.isArray(asicExtract.directors)) {
+                        console.log('   Storing', asicExtract.directors.length, 'directors...');
+                        for (const director of asicExtract.directors) {
+                            await sequelize.query(`
+                                INSERT INTO directors (
+                                    asic_extract_id, type, name, dob, place_of_birth, 
+                                    director_id_external, document_number, start_date, 
+                                    end_date, status, address_data
+                                ) VALUES (
+                                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+                                )
+                            `, {
+                                bind: [
+                                    asicExtractId,
+                                    director.type || null,
+                                    director.name || null,
+                                    director.dob || null,
+                                    director.place_of_birth || null,
+                                    director.director_id || null,
+                                    director.document_number || null,
+                                    director.start_date || null,
+                                    director.end_date || null,
+                                    director.status || null,
+                                    director.address ? JSON.stringify(director.address) : null
+                                ]
+                            });
+                            
+                            // Store Director Address in addresses table
+                            if (director.address) {
+                                await sequelize.query(`
+                                    INSERT INTO addresses (
+                                        asic_extract_id, type, entity, address, care_of, address_1, 
+                                        address_2, suburb, state, postcode, country, status, 
+                                        start_date, end_date, document_number, address_category
+                                    ) VALUES (
+                                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+                                    )
+                                `, {
+                                    bind: [
+                                        asicExtractId,
+                                        director.address.type || 'Director Address',
+                                        director.address.entity || 'Director',
+                                        director.address.address || null,
+                                        director.address.care_of || null,
+                                        director.address.address_1 || null,
+                                        director.address.address_2 || null,
+                                        director.address.suburb || null,
+                                        director.address.state || null,
+                                        director.address.postcode || null,
+                                        director.address.country || null,
+                                        director.status || null,
+                                        director.start_date || null,
+                                        director.end_date || null,
+                                        director.document_number || null,
+                                        'director'
+                                    ]
+                                });
+                            }
+                        }
+                        console.log('✅ Directors stored');
+                    }
+                    
+                    // 5. Store Shareholders
+                    if (asicExtract.shareholders && Array.isArray(asicExtract.shareholders)) {
+                        console.log('   Storing', asicExtract.shareholders.length, 'shareholders...');
+                        for (const shareholder of asicExtract.shareholders) {
+                            await sequelize.query(`
+                                INSERT INTO shareholders (
+                                    asic_extract_id, name, acn, class, number_held, 
+                                    percentage_held, document_number, beneficially_owned, 
+                                    fully_paid, jointly_held, status, address_data
+                                ) VALUES (
+                                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+                                )
+                            `, {
+                                bind: [
+                                    asicExtractId,
+                                    shareholder.name || null,
+                                    shareholder.acn || null,
+                                    shareholder.class || null,
+                                    shareholder.number_held || null,
+                                    shareholder.percentage_held || null,
+                                    shareholder.document_number || null,
+                                    shareholder.beneficially_owned || null,
+                                    shareholder.fully_paid || null,
+                                    shareholder.jointly_held || null,
+                                    shareholder.status || null,
+                                    shareholder.address ? JSON.stringify(shareholder.address) : null
+                                ]
+                            });
+                            
+                            // Store Shareholder Address in addresses table
+                            if (shareholder.address) {
+                                await sequelize.query(`
+                                    INSERT INTO addresses (
+                                        asic_extract_id, type, entity, address, care_of, address_1, 
+                                        address_2, suburb, state, postcode, country, status, 
+                                        start_date, end_date, document_number, address_category
+                                    ) VALUES (
+                                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+                                    )
+                                `, {
+                                    bind: [
+                                        asicExtractId,
+                                        shareholder.address.type || 'Shareholder Address',
+                                        shareholder.address.entity || 'Shareholder',
+                                        shareholder.address.address || null,
+                                        shareholder.address.care_of || null,
+                                        shareholder.address.address_1 || null,
+                                        shareholder.address.address_2 || null,
+                                        shareholder.address.suburb || null,
+                                        shareholder.address.state || null,
+                                        shareholder.address.postcode || null,
+                                        shareholder.address.country || null,
+                                        shareholder.status || null,
+                                        shareholder.start_date || null,
+                                        shareholder.end_date || null,
+                                        shareholder.document_number || null,
+                                        'shareholder'
+                                    ]
+                                });
+                            }
+                        }
+                        console.log('✅ Shareholders stored');
+                    }
+                    
+                    // 6. Store Secretaries
+                    if (asicExtract.secretaries && Array.isArray(asicExtract.secretaries)) {
+                        console.log('   Storing', asicExtract.secretaries.length, 'secretaries...');
+                        for (const secretary of asicExtract.secretaries) {
+                            await sequelize.query(`
+                                INSERT INTO secretaries (
+                                    asic_extract_id, type, name, dob, place_of_birth, 
+                                    secretary_id_external, document_number, start_date, 
+                                    end_date, status, address_data
+                                ) VALUES (
+                                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+                                )
+                            `, {
+                                bind: [
+                                    asicExtractId,
+                                    secretary.type || null,
+                                    secretary.name || null,
+                                    secretary.dob || null,
+                                    secretary.place_of_birth || null,
+                                    secretary.director_id || null,
+                                    secretary.document_number || null,
+                                    secretary.start_date || null,
+                                    secretary.end_date || null,
+                                    secretary.status || null,
+                                    secretary.address ? JSON.stringify(secretary.address) : null
+                                ]
+                            });
+                            
+                            // Store Secretary Address in addresses table
+                            if (secretary.address) {
+                                await sequelize.query(`
+                                    INSERT INTO addresses (
+                                        asic_extract_id, type, entity, address, care_of, address_1, 
+                                        address_2, suburb, state, postcode, country, status, 
+                                        start_date, end_date, document_number, address_category
+                                    ) VALUES (
+                                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+                                    )
+                                `, {
+                                    bind: [
+                                        asicExtractId,
+                                        secretary.address.type || 'Secretary Address',
+                                        secretary.address.entity || 'Secretary',
+                                        secretary.address.address || null,
+                                        secretary.address.care_of || null,
+                                        secretary.address.address_1 || null,
+                                        secretary.address.address_2 || null,
+                                        secretary.address.suburb || null,
+                                        secretary.address.state || null,
+                                        secretary.address.postcode || null,
+                                        secretary.address.country || null,
+                                        secretary.status || null,
+                                        secretary.start_date || null,
+                                        secretary.end_date || null,
+                                        secretary.document_number || null,
+                                        'secretary'
+                                    ]
+                                });
+                            }
+                        }
+                        console.log('✅ Secretaries stored');
+                    }
+                    
+                    // 7. Store Share Structures
+                    if (asicExtract.share_structures && Array.isArray(asicExtract.share_structures)) {
+                        console.log('   Storing', asicExtract.share_structures.length, 'share structures...');
+                        for (const shareStructure of asicExtract.share_structures) {
+                            await sequelize.query(`
+                                INSERT INTO share_structures (
+                                    asic_extract_id, class_code, class_description, status, 
+                                    share_count, amount_paid, amount_due, document_number
+                                ) VALUES (
+                                    $1, $2, $3, $4, $5, $6, $7, $8
+                                )
+                            `, {
+                                bind: [
+                                    asicExtractId,
+                                    shareStructure.class_code || null,
+                                    shareStructure.class_description || null,
+                                    shareStructure.status || null,
+                                    shareStructure.share_count || null,
+                                    shareStructure.amount_paid || null,
+                                    shareStructure.amount_due || null,
+                                    shareStructure.document_number || null
+                                ]
+                            });
+                        }
+                        console.log('✅ Share Structures stored');
+                    }
+                    
+                    // 8. Store Documents
+                    if (asicExtract.documents && Array.isArray(asicExtract.documents)) {
+                        console.log('   Storing', asicExtract.documents.length, 'documents...');
+                        for (const document of asicExtract.documents) {
+                            await sequelize.query(`
+                                INSERT INTO documents (
+                                    asic_extract_id, type, description, document_number, 
+                                    form_code, page_count, effective_at, processed_at, received_at
+                                ) VALUES (
+                                    $1, $2, $3, $4, $5, $6, $7, $8, $9
+                                )
+                            `, {
+                                bind: [
+                                    asicExtractId,
+                                    document.type || null,
+                                    document.description || null,
+                                    document.document_number || null,
+                                    document.form_code || null,
+                                    document.page_count || null,
+                                    document.effective_at || null,
+                                    document.processed_at || null,
+                                    document.received_at || null
+                                ]
+                            });
+                        }
+                        console.log('✅ Documents stored');
+                    }
+                    
+                } catch (asicExtractError) {
+                    console.error('⚠️ Error processing individual ASIC extract:', asicExtractError.message);
+                    console.error('   ASIC extract data:', JSON.stringify(asicExtract, null, 2));
+                    // Continue with next ASIC extract
+                }
+            }
+        } else {
+            console.log('⚠️ No ASIC extracts data found or data is not an array');
+        }
+        
+        // 8. Store Cases
+        if (reportData.cases && typeof reportData.cases === 'object') {
+            console.log('📊 Processing cases data...');
+            for (const [caseId, caseData] of Object.entries(reportData.cases)) {
+                try {
+                    await sequelize.query(`
+                        INSERT INTO cases (
+                            report_id, type, notification_time, court_name, 
+                            state, court_type, case_type, case_number, jurisdiction, 
+                            suburb, next_hearing_date, case_name, total_parties, 
+                            total_documents, total_hearings, internal_reference, 
+                            name, other_names, insolvency_risk_factor, match_on
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+                        )
+                    `, {
+                        bind: [
+                            reportId,
+                            caseData.type || null,
+                            caseData.notification_time || null,
+                            caseData.court_name || null,
+                            caseData.state || null,
+                            caseData.court_type || null,
+                            caseData.case_type || null,
+                            caseData.case_number || null,
+                            caseData.jurisdiction || null,
+                            caseData.suburb || null,
+                            caseData.next_hearing_date || null,
+                            caseData.case_name || null,
+                            caseData.total_parties || null,
+                            caseData.total_documents || null,
+                            caseData.total_hearings || null,
+                            caseData.internal_reference || null,
+                            caseData.name || null,
+                            caseData.other_names || null,
+                            caseData.insolvency_risk_factor || null,
+                            caseData.match_on || null
+                        ]
+                    });
+                } catch (caseError) {
+                    console.error('⚠️ Error storing case:', caseError.message);
+                }
+            }
+            console.log('✅ Cases stored');
+        } else {
+            console.log('⚠️ No cases data found');
+        }
+        
+        // 9. Store Insolvencies
+        if (reportData.insolvencies && typeof reportData.insolvencies === 'object') {
+            console.log('📊 Processing insolvencies data...');
+            for (const [insolvencyId, insolvencyData] of Object.entries(reportData.insolvencies)) {
+                try {
+                    await sequelize.query(`
+                        INSERT INTO insolvencies (
+                            report_id, uuid, type, notification_time, court_name, case_type, 
+                            case_number, asic_notice_id, case_name, total_parties, 
+                            internal_reference, name, other_names, insolvency_risk_factor, match_on
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+                        )
+                    `, {
+                        bind: [
+                            reportId,
+                            insolvencyData.uuid || null,
+                            insolvencyData.type || null,
+                            insolvencyData.notification_time || null,
+                            insolvencyData.court_name || null,
+                            insolvencyData.case_type || null,
+                            insolvencyData.case_number || null,
+                            insolvencyData.asic_notice_id || null,
+                            insolvencyData.case_name || null,
+                            insolvencyData.total_parties || null,
+                            insolvencyData.internal_reference || null,
+                            insolvencyData.name || null,
+                            insolvencyData.other_names || null,
+                            insolvencyData.insolvency_risk_factor || null,
+                            insolvencyData.match_on || null
+                        ]
+                    });
+                } catch (insolvencyError) {
+                    console.error('⚠️ Error storing insolvency:', insolvencyError.message);
+                }
+            }
+            console.log('✅ Insolvencies stored');
+        } else {
+            console.log('⚠️ No insolvencies data found');
+        }
+        
+        // 10. Store Tax Debts
+        if (reportData.current_tax_debt) {
+            console.log('📊 Processing current tax debt data...');
+            try {
                 await sequelize.query(`
                     INSERT INTO tax_debts (
                         report_id, date, amount, status, ato_added_at, ato_updated_at
@@ -350,267 +656,19 @@ async function parseAndStoreReportData(reportId, reportData) {
                 `, {
                     bind: [
                         reportId,
-                        taxDebt.date,
-                        taxDebt.amount,
-                        taxDebt.status,
-                        taxDebt.ato_added_at,
-                        taxDebt.ato_updated_at
+                        reportData.current_tax_debt.date || null,
+                        reportData.current_tax_debt.amount || null,
+                        reportData.current_tax_debt.status || null,
+                        reportData.current_tax_debt.ato_added_at || null,
+                        reportData.current_tax_debt.ato_updated_at || null
                     ]
                 });
+                console.log('✅ Current tax debt stored');
+            } catch (taxDebtError) {
+                console.error('⚠️ Error storing current tax debt:', taxDebtError.message);
             }
-            console.log('✅ Tax Debts stored');
-        }
-        
-        // 9. Store Cases
-        if (reportData.cases && typeof reportData.cases === 'object') {
-            for (const [caseUuid, caseData] of Object.entries(reportData.cases)) {
-                const [caseResult] = await sequelize.query(`
-                    INSERT INTO cases (
-                        report_id, type, notification_time, court_name, state, court_type, 
-                        case_type, case_number, jurisdiction, suburb, next_hearing_date, 
-                        case_name, total_parties, total_documents, total_hearings, 
-                        timezone, internal_reference, name, other_names, insolvency_risk_factor, 
-                        party_role, most_recent_event, match_on
-                    ) VALUES (
-                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
-                    ) RETURNING case_id
-                `, {
-                    bind: [
-                        reportId,
-                        caseData.type,
-                        caseData.notification_time,
-                        caseData.court_name,
-                        caseData.state,
-                        caseData.court_type,
-                        caseData.case_type,
-                        caseData.case_number,
-                        caseData.jurisdiction,
-                        caseData.suburb,
-                        caseData.next_hearing_date,
-                        caseData.case_name,
-                        caseData.total_parties,
-                        caseData.total_documents,
-                        caseData.total_hearings,
-                        caseData.timezone,
-                        caseData.internal_reference,
-                        caseData.name,
-                        caseData.other_names,
-                        caseData.insolvency_risk_factor,
-                        caseData.party_role,
-                        caseData.most_recent_event,
-                        caseData.match_on
-                    ]
-                });
-                
-                const caseId = caseResult[0].case_id;
-                
-                // Store Case Parties
-                if (caseData.parties && Array.isArray(caseData.parties)) {
-                    for (const party of caseData.parties) {
-                        await sequelize.query(`
-                            INSERT INTO case_parties (
-                                case_id, name, type, role, offence, plea, representative_firm, 
-                                representative_name, address, phone, fax, abn, acn
-                            ) VALUES (
-                                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13
-                            )
-                        `, {
-                            bind: [
-                                caseId,
-                                party.name,
-                                party.type,
-                                party.role,
-                                party.offence,
-                                party.plea,
-                                party.representative_firm,
-                                party.representative_name,
-                                party.address,
-                                party.phone,
-                                party.fax,
-                                party.abn,
-                                party.acn
-                            ]
-                        });
-                    }
-                }
-                
-                // Store Case Hearings
-                if (caseData.hearings && Array.isArray(caseData.hearings)) {
-                    for (const hearing of caseData.hearings) {
-                        await sequelize.query(`
-                            INSERT INTO case_hearings (
-                                case_id, datetime, officer, court_room, court_name, court_phone, 
-                                court_address, court_suburb, type, list_no, outcome
-                            ) VALUES (
-                                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-                            )
-                        `, {
-                            bind: [
-                                caseId,
-                                hearing.datetime,
-                                hearing.officer,
-                                hearing.court_room,
-                                hearing.court_name,
-                                hearing.court_phone,
-                                hearing.court_address,
-                                hearing.court_suburb,
-                                hearing.type,
-                                hearing.list_no,
-                                hearing.outcome
-                            ]
-                        });
-                    }
-                }
-                
-                // Store Case Documents
-                if (caseData.documents && Array.isArray(caseData.documents)) {
-                    for (const document of caseData.documents) {
-                        await sequelize.query(`
-                            INSERT INTO case_documents (
-                                case_id, datetime, title, description, filed_by
-                            ) VALUES (
-                                $1, $2, $3, $4, $5
-                            )
-                        `, {
-                            bind: [
-                                caseId,
-                                document.datetime,
-                                document.title,
-                                document.description,
-                                document.filed_by
-                            ]
-                        });
-                    }
-                }
-                
-                // Store Case Applications
-                if (caseData.applications && Array.isArray(caseData.applications)) {
-                    for (const application of caseData.applications) {
-                        await sequelize.query(`
-                            INSERT INTO case_applications (
-                                case_id, title, type, status, date_filed, date_finalised
-                            ) VALUES (
-                                $1, $2, $3, $4, $5, $6
-                            )
-                        `, {
-                            bind: [
-                                caseId,
-                                application.title,
-                                application.type,
-                                application.status,
-                                application.date_filed,
-                                application.date_finalised
-                            ]
-                        });
-                    }
-                }
-                
-                // Store Case Judgments
-                if (caseData.judgments && Array.isArray(caseData.judgments)) {
-                    for (const judgment of caseData.judgments) {
-                        await sequelize.query(`
-                            INSERT INTO case_judgments (
-                                case_id, uuid, unique_id, number, case_number, title, date, url, 
-                                state, court, court_type, location, officer, case_type, catchwords, 
-                                legislation, cases_cited, result, division, registry, national_practice_area, 
-                                sub_area, category, number_of_paragraphs, date_of_last_submission, 
-                                orders, reasons_for_judgment, prior_decisions
-                            ) VALUES (
-                                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, 
-                                $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
-                            )
-                        `, {
-                            bind: [
-                                caseId,
-                                judgment.uuid,
-                                judgment.unique_id,
-                                judgment.number,
-                                judgment.case_number,
-                                judgment.title,
-                                judgment.date,
-                                judgment.url,
-                                judgment.state,
-                                judgment.court,
-                                judgment.court_type,
-                                judgment.location,
-                                judgment.officer,
-                                judgment.case_type,
-                                judgment.catchwords,
-                                judgment.legislation,
-                                judgment.cases_cited,
-                                judgment.result,
-                                judgment.division,
-                                judgment.registry,
-                                judgment.national_practice_area,
-                                judgment.sub_area,
-                                judgment.category,
-                                judgment.number_of_paragraphs,
-                                judgment.date_of_last_submission,
-                                judgment.orders,
-                                judgment.reasons_for_judgment,
-                                JSON.stringify(judgment.prior_decisions || [])
-                            ]
-                        });
-                    }
-                }
-            }
-            console.log('✅ Cases and related data stored');
-        }
-        
-        // 10. Store Insolvencies
-        if (reportData.insolvencies && typeof reportData.insolvencies === 'object') {
-            for (const [insolvencyUuid, insolvencyData] of Object.entries(reportData.insolvencies)) {
-                const [insolvencyResult] = await sequelize.query(`
-                    INSERT INTO insolvencies (
-                        report_id, uuid, type, notification_time, court_name, case_type, 
-                        case_number, asic_notice_id, case_name, total_parties, 
-                        internal_reference, name, other_names, insolvency_risk_factor, match_on
-                    ) VALUES (
-                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
-                    ) RETURNING insolvency_id
-                `, {
-                    bind: [
-                        reportId,
-                        insolvencyData.uuid,
-                        insolvencyData.type,
-                        insolvencyData.notification_time,
-                        insolvencyData.court_name,
-                        insolvencyData.case_type,
-                        insolvencyData.case_number,
-                        insolvencyData.asic_notice_id,
-                        insolvencyData.case_name,
-                        insolvencyData.total_parties,
-                        insolvencyData.internal_reference,
-                        insolvencyData.name,
-                        insolvencyData.other_names,
-                        insolvencyData.insolvency_risk_factor,
-                        insolvencyData.match_on
-                    ]
-                });
-                
-                const insolvencyId = insolvencyResult[0].insolvency_id;
-                
-                // Store Insolvency Parties
-                if (insolvencyData.parties && Array.isArray(insolvencyData.parties)) {
-                    for (const party of insolvencyData.parties) {
-                        await sequelize.query(`
-                            INSERT INTO insolvency_parties (
-                                insolvency_id, name, acn, url
-                            ) VALUES (
-                                $1, $2, $3, $4
-                            )
-                        `, {
-                            bind: [
-                                insolvencyId,
-                                party.name,
-                                party.acn,
-                                party.url
-                            ]
-                        });
-                    }
-                }
-            }
-            console.log('✅ Insolvencies and related data stored');
+        } else {
+            console.log('⚠️ No current tax debt data found');
         }
         
         console.log('🎉 All report data parsed and stored successfully!');
@@ -625,46 +683,47 @@ async function parseAndStoreReportData(reportId, reportData) {
 function parseReportType(type) {
     const result = {
         type: null,
-        asicType: null,
-        subType: null
+        asicType: null
     };
     
-    // Parse main type
+    // Parse main type according to user requirements
     if (type.includes('asic')) {
         result.type = 'ASIC';
-        if (type.includes('current')) {
-            result.asicType = 'CURRENT';
-        } else if (type.includes('historical')) {
-            result.asicType = 'HISTORICAL';
-        } else if (type.includes('company')) {
-            result.asicType = 'COMPANY';
+        // All ASIC types map to 'Current' as per user requirement
+        if (type.includes('current') || type.includes('historical') || type.includes('company')) {
+            result.asicType = 'Current';
         } else if (type.includes('personal')) {
-            result.asicType = 'PERSONAL';
+            result.asicType = 'Personal';
         } else if (type.includes('document')) {
-            result.asicType = 'ADD DOCUMENT SEARCH';
+            result.asicType = 'Document Search';
+        } else {
+            result.asicType = 'Current'; // Default for ASIC
         }
     } else if (type.includes('court')) {
         result.type = 'COURT';
-        result.subType = 'ACN/ABN COURT FILES';
+        result.asicType = 'Current'; // COURT maps to asic-current as per user requirement
     } else if (type.includes('ato')) {
         result.type = 'ATO';
+        result.asicType = 'Current'; // ATO maps to asic-current as per user requirement
     } else if (type.includes('land')) {
         result.type = 'LAND TITLE';
-        result.subType = 'ABN/ACN PROPERTY TITLE';
     } else if (type.includes('ppsr')) {
-        result.subType = 'PPSR';
+        result.type = 'PPSR';
     } else if (type.includes('property')) {
-        result.subType = 'ABN/ACN PROPERTY TITLE';
+        result.type = 'PROPERTY';
     } else if (type.includes('director')) {
         if (type.includes('ppsr')) {
-            result.subType = 'DIRECTOR PPSR';
+            result.type = 'DIRECTOR PPSR';
         } else if (type.includes('bankruptcy')) {
-            result.subType = 'DIRECTOR BANKRUPTCY';
+            result.type = 'DIRECTOR BANKRUPTCY';
         } else if (type.includes('property')) {
-            result.subType = 'DIRECTOR PROPERTY TITLE';
+            result.type = 'DIRECTOR PROPERTY';
         } else if (type.includes('related')) {
-            result.subType = 'DIRECTOR RELATED ENTITIES';
+            result.type = 'DIRECTOR RELATED';
         }
+    } else {
+        // If no specific pattern matches, use the type as-is (uppercase)
+        result.type = type.toUpperCase();
     }
     
     return result;
@@ -679,6 +738,7 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
         // Extract ABN from business data
         console.log(`🔍 BUSINESS DATA DEBUG:`);
         console.log(`   Full business object:`, JSON.stringify(business, null, 2));
+        console.log(`   isCompany field:`, business.isCompany);
         
         const abn = business?.Abn || business?.abn || business?.ABN;
         
@@ -692,28 +752,31 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
         // Parse the type into granular fields for cache checking
         const parsedType = parseReportType(type);
         
-        // Check if report already exists in Reports table (by ABN only)
-        console.log(`🔍 Checking Reports table for existing report by ABN...`);
+        // Check if report already exists in Reports table (by ABN + type)
+        console.log(`🔍 Checking Reports table for existing report by ABN + type...`);
         console.log(`   ABN: ${abn}`);
+        console.log(`   Type: ${type}`);
+        console.log(`   Parsed Type: ${parsedType.type}`);
         
         const existingReport = await Report.findOne({
             where: {
-                abn: abn
+                abn: abn,
+                type: parsedType.type
             },
             order: [['created_at', 'DESC']]
         });
         
         if (existingReport) {
             console.log(`✅ CACHE HIT: Found existing report in Reports table`);
-            console.log(`   Report ID: ${existingReport.reportId}`);
-            console.log(`   UUID: ${existingReport.uuid}`);
+            console.log(`   Report ID: ${existingReport.id}`);
+            console.log(`   UUID: ${existingReport.uid}`);
             console.log(`   Created: ${existingReport.created_at}`);
             
             // Fetch the report data from Alares API for parsing and storing
             let reportData = null;
             try {
                 console.log('📡 Fetching report data from Alares API for cached report...');
-                reportData = await fetchReportData(existingReport.uuid, bearerToken);
+                reportData = await fetchReportData(existingReport.uid, bearerToken);
                 console.log('✅ Report data fetched successfully from Alares API');
             } catch (fetchError) {
                 console.error('⚠️ Error fetching report data:', fetchError.message);
@@ -723,7 +786,7 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
             // Parse and store structured data in separate tables (even for cached reports)
             if (reportData) {
                 try {
-                    await parseAndStoreReportData(existingReport.reportId, reportData);
+                    await parseAndStoreReportData(existingReport.id, reportData);
                     console.log('✅ Structured report data stored successfully for cached report');
                 } catch (parseError) {
                     console.error('⚠️ Error storing structured data for cached report:', parseError.message);
@@ -736,10 +799,7 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
                 where: {
                     userId: userId,
                     matterId: matterId || null,
-                    reportReferenceId: existingReport.reportId,
-                    type: parsedType.type,
-                    asicType: parsedType.asicType,
-                    subType: parsedType.subType
+                    reportId: existingReport.id
                 }
             });
             
@@ -749,17 +809,12 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
                     const userReport = await UserReport.create({
                         userId: userId,
                         matterId: matterId || null,
-                        reportReferenceId: existingReport.reportId,
-                        reportName: `${parsedType.type || parsedType.subType || type.toUpperCase()} Report for ${business.Name || business.name || 'Unknown Company'}`,
-                        isPaid: true,
-                        type: parsedType.type,
-                        asicType: parsedType.asicType,
-                        subType: parsedType.subType,
-                        createdAt: new Date(),
-                        updatedAt: new Date()
+                        reportId: existingReport.id,
+                        reportName: `${parsedType.type || type.toUpperCase()}_${abn}_${business.Name || business.name || 'Unknown Company'}.pdf`,
+                        isPaid: true
                     });
                     
-                    console.log('✅ UserReport created (using cached report):', userReport.reportId);
+                    console.log('✅ UserReport created (using cached report):', userReport.id);
                 } catch (userReportError) {
                     console.error('❌ Error creating UserReport:', userReportError);
                     throw userReportError;
@@ -770,11 +825,11 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
             
             return {
                 success: true,
-                reportId: existingReport.reportId,
-                uuid: existingReport.uuid,
+                reportId: existingReport.id,
+                uuid: existingReport.uid,
                 status: 'cached',
                 fromCache: true,
-                savedReportId: existingReport.reportId,
+                savedReportId: existingReport.id,
                 type: parsedType.type
             };
         }
@@ -791,14 +846,9 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
         };
         
         // Add report type parameters based on the type
-        if (type === 'asic-current' || type === 'current') {
+        // According to user requirements: ASIC, COURT, ATO all map to asic-current
+        if (type.includes('asic') || type.includes('court') || type.includes('ato')) {
             params.asic_current = '1';
-        } else if (type === 'asic-historical' || type === 'historical') {
-            params.asic_historical = '1';
-        } else if (type === 'court') {
-            params.court = '1';
-        } else if (type === 'ato') {
-            params.ato = '1';
         } else if (type === 'land') {
             params.land = '1';
         } else if (type === 'ppsr') {
@@ -834,31 +884,29 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
         
         // Store the report data in database (basic report record)
         const savedReport = await Report.create({
-            uuid: createResponse.data.uuid,
-            abn: abn,
+            category: business.isCompany ? 'organization' : 'personal',
+            isCompany: business.isCompany || false,
             type: parsedType.type,
             asicType: parsedType.asicType,
-            subType: parsedType.subType
+            abn: abn,
+            searchKey: business.Name || business.name || 'Unknown',
+            uid: createResponse.data.uuid,
+            isAlert: true
         });
         
-        console.log('Report data saved to database:', savedReport.reportId);
+        console.log('Report data saved to database:', savedReport.id);
         
         // Create UserReport record for user-specific tracking
         try {
             const userReport = await UserReport.create({
                 userId: userId,
                 matterId: matterId || null, // Include matterId if provided
-                reportReferenceId: savedReport.reportId,
-                reportName: `${parsedType.type || parsedType.subType || type.toUpperCase()} Report for ${business.Name || business.name || 'Unknown Company'}`,
-                isPaid: true, // Report is paid for
-                type: parsedType.type,
-                asicType: parsedType.asicType,
-                subType: parsedType.subType,
-                createdAt: new Date(),
-                updatedAt: new Date()
+                reportId: savedReport.id,
+                reportName: `${parsedType.type || parsedType.subType || type.toUpperCase()}_${abn}_${business.Name || business.name || 'Unknown Company'}.pdf`,
+                isPaid: true // Report is paid for
             });
             
-            console.log('UserReport created:', userReport.reportId);
+            console.log('UserReport created:', userReport.id);
         } catch (userReportError) {
             console.error('Error creating UserReport:', userReportError);
             // Continue even if UserReport creation fails
@@ -866,7 +914,7 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
         
         // Parse and store structured data in separate tables
         try {
-            await parseAndStoreReportData(savedReport.reportId, reportData);
+            await parseAndStoreReportData(savedReport.id, reportData);
             console.log('Structured report data stored successfully');
         } catch (parseError) {
             console.error('Error storing structured data:', parseError);
@@ -880,7 +928,7 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
             uuid: createResponse.data.uuid,
             status: createResponse.status,
             fromCache: false,
-            savedReportId: savedReport.reportId,
+            savedReportId: savedReport.id,
             type: parsedType.type
         };
         

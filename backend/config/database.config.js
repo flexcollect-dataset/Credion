@@ -8,7 +8,7 @@ module.exports = {
         password: process.env.DB_PASS || 'Luffy123&&Lucky',
         port: process.env.DB_PORT || 15432,
         dialect: 'postgres',
-        logging: false,
+        logging: console.log,
         pool: {
             max: 5,
             min: 0,

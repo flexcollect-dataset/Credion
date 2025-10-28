@@ -9,7 +9,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { testConnection } = require('./config/db');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(helmet({
@@ -318,14 +318,19 @@ app.get('/reports', async (req, res) => {
   try {
     try {
       const reports = await Report.findAll({
-        order: [['reportId', 'DESC']]
+        order: [['id', 'DESC']]
       });
 
       const formattedReports = reports.map(report => ({
-        id: report.reportId,
-        uuid: report.uuid,
+        id: report.id,
+        category: report.category,
+        isCompany: report.isCompany,
+        type: report.type,
+        asicType: report.asicType,
         abn: report.abn,
-        type: report.type
+        searchKey: report.searchKey,
+        uid: report.uid,
+        isAlert: report.isAlert
       }));
 
       res.json({
@@ -358,7 +363,7 @@ app.get('/reports/:id', async (req, res) => {
     try {
       const report = await Report.findOne({
         where: { 
-          reportId: id
+          id: id
         }
       });
 
@@ -372,10 +377,15 @@ app.get('/reports/:id', async (req, res) => {
       res.json({
         success: true,
         report: {
-          id: report.reportId,
-          uuid: report.uuid,
+          id: report.id,
+          category: report.category,
+          isCompany: report.isCompany,
+          type: report.type,
+          asicType: report.asicType,
           abn: report.abn,
-          type: report.type
+          searchKey: report.searchKey,
+          uid: report.uid,
+          isAlert: report.isAlert
         }
       });
 
@@ -625,7 +635,7 @@ const pdfGenerator = require('./services/pdfGenerator');
            // Get report data from database
            const Report = require('./models/Report');
            const report = await Report.findOne({
-             where: { reportId: reportId }
+             where: { id: reportId }
            });
 
            if (!report) {
@@ -688,6 +698,82 @@ app.listen(PORT, async () => {
   
   // Test database connection
   await testConnection();
+});
+
+// Clear all tables endpoint
+app.post('/api/clear-tables', async (req, res) => {
+  try {
+    const { sequelize } = require('./config/db');
+    
+    console.log('🧹 Clearing all tables...');
+    
+    // Clear tables in correct order (respecting foreign key constraints)
+    await sequelize.query('DELETE FROM user_reports');
+    console.log('✅ Cleared user_reports table');
+    
+    await sequelize.query('DELETE FROM addresses');
+    console.log('✅ Cleared addresses table');
+    
+    await sequelize.query('DELETE FROM directors');
+    console.log('✅ Cleared directors table');
+    
+    await sequelize.query('DELETE FROM shareholders');
+    console.log('✅ Cleared shareholders table');
+    
+    await sequelize.query('DELETE FROM secretaries');
+    console.log('✅ Cleared secretaries table');
+    
+    await sequelize.query('DELETE FROM office_holders');
+    console.log('✅ Cleared office_holders table');
+    
+    await sequelize.query('DELETE FROM share_structures');
+    console.log('✅ Cleared share_structures table');
+    
+    await sequelize.query('DELETE FROM documents');
+    console.log('✅ Cleared documents table');
+    
+    await sequelize.query('DELETE FROM asic_extracts');
+    console.log('✅ Cleared asic_extracts table');
+    
+    await sequelize.query('DELETE FROM entities');
+    console.log('✅ Cleared entities table');
+    
+    await sequelize.query('DELETE FROM cases');
+    console.log('✅ Cleared cases table');
+    
+    await sequelize.query('DELETE FROM insolvencies');
+    console.log('✅ Cleared insolvencies table');
+    
+    await sequelize.query('DELETE FROM tax_debts');
+    console.log('✅ Cleared tax_debts table');
+    
+    await sequelize.query('DELETE FROM reports');
+    console.log('✅ Cleared reports table');
+    
+    await sequelize.query('DELETE FROM matters');
+    console.log('✅ Cleared matters table');
+    
+    console.log('🎉 All tables cleared successfully!');
+    
+    res.json({
+      success: true,
+      message: 'All tables cleared successfully',
+      clearedTables: [
+        'user_reports', 'addresses', 'directors', 'shareholders', 
+        'secretaries', 'office_holders', 'share_structures', 'documents',
+        'asic_extracts', 'entities', 'cases', 'insolvencies', 
+        'tax_debts', 'reports', 'matters'
+      ]
+    });
+    
+  } catch (error) {
+    console.error('❌ Error clearing tables:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to clear tables',
+      message: error.message
+    });
+  }
 });
 
 module.exports = app;
