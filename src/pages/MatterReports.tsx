@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, FileText, CheckCircle, Circle, Calendar } from 'lucide-react';
+import { ArrowLeft, FileText, CheckCircle, Circle, Calendar, Download, RefreshCw, AlertTriangle, Plus } from 'lucide-react';
 import { apiService } from '../services/api';
 
 interface UserReport {
@@ -20,6 +20,9 @@ const MatterReports: React.FC = () => {
   const [reports, setReports] = useState<UserReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [downloadingReports, setDownloadingReports] = useState<Set<number>>(new Set());
+  const [updatingReports, setUpdatingReports] = useState<Set<number>>(new Set());
+  const [alertingReports, setAlertingReports] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     loadMatterReports();
@@ -57,6 +60,82 @@ const MatterReports: React.FC = () => {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const downloadReport = async (report: UserReport) => {
+    try {
+      setDownloadingReports(prev => new Set(prev).add(report.reportId));
+      
+      // Determine report type based on report name or other criteria
+      const reportType = report.reportName.includes('ASIC') ? 'ASIC' : 'COURT';
+      
+      const { blob, filename } = await apiService.generatePDF(report.reportId, reportType);
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+    } catch (error: any) {
+      console.error('Error downloading report:', error);
+      setError(error.message || 'Failed to download report');
+    } finally {
+      setDownloadingReports(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(report.reportId);
+        return newSet;
+      });
+    }
+  };
+
+  const updateReport = async (report: UserReport) => {
+    try {
+      setUpdatingReports(prev => new Set(prev).add(report.reportId));
+      
+      // Here you would call an API to refresh/update the report
+      // For now, we'll just reload the reports
+      await loadMatterReports();
+      
+    } catch (error: any) {
+      console.error('Error updating report:', error);
+      setError(error.message || 'Failed to update report');
+    } finally {
+      setUpdatingReports(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(report.reportId);
+        return newSet;
+      });
+    }
+  };
+
+  const alertReport = async (report: UserReport) => {
+    try {
+      setAlertingReports(prev => new Set(prev).add(report.reportId));
+      
+      // Here you would call an API to set up alerts for the report
+      // For now, we'll just show a success message
+      alert(`Alert set up for report: ${report.reportName}`);
+      
+    } catch (error: any) {
+      console.error('Error setting up alert:', error);
+      setError(error.message || 'Failed to set up alert');
+    } finally {
+      setAlertingReports(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(report.reportId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleAddNewReport = () => {
+    // Navigate to search page with matter ID as a query parameter
+    navigate(`/search?matterId=${matterId}`);
   };
 
   if (isLoading) {
@@ -103,10 +182,17 @@ const MatterReports: React.FC = () => {
 
         {/* Reports List */}
         <div className="card">
-          <div className="mb-6">
+          <div className="mb-6 flex items-center justify-between">
             <h2 className="text-2xl font-bold text-gray-900">
               Reports ({reports.length})
             </h2>
+            <button
+              onClick={handleAddNewReport}
+              className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors duration-200 font-medium"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add New Report
+            </button>
           </div>
 
           {reports.length === 0 ? (
@@ -149,6 +235,63 @@ const MatterReports: React.FC = () => {
                         <Calendar className="w-4 h-4 mr-1" />
                         Created {formatDate(report.createdAt)}
                       </div>
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div className="flex items-center space-x-2 ml-4">
+                      {/* Download Button */}
+                      <button
+                        onClick={() => downloadReport(report)}
+                        disabled={downloadingReports.has(report.reportId)}
+                        className={`p-2 rounded-lg transition-colors duration-200 ${
+                          downloadingReports.has(report.reportId)
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                        }`}
+                        title="Download Report"
+                      >
+                        {downloadingReports.has(report.reportId) ? (
+                          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <Download className="w-4 h-4" />
+                        )}
+                      </button>
+
+                      {/* Update Button */}
+                      <button
+                        onClick={() => updateReport(report)}
+                        disabled={updatingReports.has(report.reportId)}
+                        className={`p-2 rounded-lg transition-colors duration-200 ${
+                          updatingReports.has(report.reportId)
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-green-50 text-green-600 hover:bg-green-100'
+                        }`}
+                        title="Update Report"
+                      >
+                        {updatingReports.has(report.reportId) ? (
+                          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <RefreshCw className="w-4 h-4" />
+                        )}
+                      </button>
+
+                      {/* Alert Button */}
+                      <button
+                        onClick={() => alertReport(report)}
+                        disabled={alertingReports.has(report.reportId)}
+                        className={`p-2 rounded-lg transition-colors duration-200 ${
+                          alertingReports.has(report.reportId)
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-orange-50 text-orange-600 hover:bg-orange-100'
+                        }`}
+                        title="Set Alert"
+                      >
+                        {alertingReports.has(report.reportId) ? (
+                          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <AlertTriangle className="w-4 h-4" />
+                        )}
+                      </button>
                     </div>
                   </div>
                 </div>

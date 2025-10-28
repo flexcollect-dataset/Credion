@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import PropertyModal from '../components/PropertyModal';
 import { apiService } from '../services/api';
 
@@ -13,6 +14,10 @@ interface ReceiptItem {
 }
 
 const Search: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const matterIdFromUrl = searchParams.get('matterId');
+  
   // Check if user is logged in
   const [isLoading, setIsLoading] = useState(true);
   const [currentMatter, setCurrentMatter] = useState<any>(null);
@@ -29,7 +34,34 @@ const Search: React.FC = () => {
       window.location.href = '/login';
     }
     
-    if (matterData) {
+    // If matterId is provided in URL, fetch that matter's details
+    if (matterIdFromUrl) {
+      const fetchMatterDetails = async () => {
+        try {
+          const response = await apiService.getMatter(Number(matterIdFromUrl));
+          if (response.success) {
+            setCurrentMatter(response.matter);
+          } else {
+            console.error('Failed to fetch matter details');
+            // Fallback to localStorage matter
+            if (matterData) {
+              setCurrentMatter(JSON.parse(matterData));
+            } else {
+              window.location.href = '/matter-selection';
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching matter details:', error);
+          // Fallback to localStorage matter
+          if (matterData) {
+            setCurrentMatter(JSON.parse(matterData));
+          } else {
+            window.location.href = '/matter-selection';
+          }
+        }
+      };
+      fetchMatterDetails();
+    } else if (matterData) {
       setCurrentMatter(JSON.parse(matterData));
     } else {
       // Redirect to matter selection if no matter selected
@@ -37,7 +69,7 @@ const Search: React.FC = () => {
     }
     
     setIsLoading(false);
-  }, []);
+  }, [matterIdFromUrl]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -408,7 +440,7 @@ const Search: React.FC = () => {
           },
           type: reportType,
           userId: JSON.parse(localStorage.getItem('user') || '{}').userId,
-          matterId: currentMatter?.matterId
+          matterId: matterIdFromUrl ? Number(matterIdFromUrl) : currentMatter?.matterId
         };
 
           console.log('Report data:', reportData);
@@ -444,6 +476,11 @@ const Search: React.FC = () => {
       // Send reports via email
       await apiService.sendReports(email, generatedReports, totalPrice);
       alert(`Reports sent successfully to: ${email}`);
+      
+      // Redirect back to matter reports if we came from there
+      if (matterIdFromUrl) {
+        navigate(`/matter-reports/${matterIdFromUrl}`);
+      }
     } catch (error) {
       console.error('Error sending email:', error);
       alert('Error sending reports. Please try again.');
@@ -469,6 +506,11 @@ const Search: React.FC = () => {
       }
       
       alert('Reports downloaded successfully!');
+      
+      // Redirect back to matter reports if we came from there
+      if (matterIdFromUrl) {
+        navigate(`/matter-reports/${matterIdFromUrl}`);
+      }
     } catch (error) {
       console.error('Error downloading reports:', error);
       alert('Error downloading reports. Please try again.');
@@ -537,7 +579,7 @@ const Search: React.FC = () => {
       ) : (
         <>
           {/* Main Content */}
-          <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-8 lg:mr-96">
+          <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 lg:py-8 pr-96">
         {/* Category Selection */}
         <div className="card">
           <h2 className="section-title">Select <span>Category</span></h2>
