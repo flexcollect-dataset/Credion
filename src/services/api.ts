@@ -296,10 +296,10 @@ class ApiService {
   }
 
   // Send Reports via Email API
-  async sendReports(email: string, reports: any[], totalPrice: number): Promise<any> {
+  async sendReports(email: string, reports: any[], totalPrice: number, matterName?: string): Promise<any> {
     return this.request('/api/send-reports', {
       method: 'POST',
-      body: JSON.stringify({ email, reports, totalPrice }),
+      body: JSON.stringify({ email, reports, totalPrice, matterName }),
     });
   }
 
@@ -317,7 +317,7 @@ class ApiService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to generate PDFf');
+        throw new Error(errorData.message || 'Failed to generate PDF');
       }
 
       // Extract filename from Content-Disposition header
@@ -343,7 +343,7 @@ class ApiService {
       const blob = await response.blob();
       return { blob, filename };
     } catch (error) {
-      console.error('Error generating PDFfff:', error);
+      console.error('Error generating PDF:', error);
       throw error;
     }
   }

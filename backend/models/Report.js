@@ -20,12 +20,12 @@ const Report = sequelize.define('Report', {
         field: 'is_company'
     },
     type: {
-        type: DataTypes.ENUM('ASIC', 'COURT', 'ATO', 'LAND TITLE', 'PPSR'),
+        type: DataTypes.ENUM('ASIC', 'COURT', 'ATO', 'LAND TITLE', 'PPSR', 'PROPERTY', 'DIRECTOR PPSR', 'DIRECTOR BANKRUPTCY', 'DIRECTOR PROPERTY', 'DIRECTOR RELATED'),
         allowNull: false,
         field: 'type'
     },
     asicType: {
-        type: DataTypes.ENUM('Current', 'Historical'),
+        type: DataTypes.ENUM('Current', 'Historical', 'Personal', 'Company', 'Document Search'),
         allowNull: true,
         field: 'asic_type'
     },

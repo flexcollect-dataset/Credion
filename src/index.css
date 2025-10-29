@@ -39,6 +39,15 @@
     @apply bg-gradient-to-r from-red-600 to-red-700 bg-clip-text text-transparent;
   }
 
+  /* Limited functionality styling */
+  .limited-functionality {
+    @apply opacity-75 border-orange-300 bg-orange-50 text-orange-700;
+  }
+  
+  .limited-functionality:hover {
+    @apply opacity-90 bg-orange-100;
+  }
+
   /* Card-based design components */
   .card {
     @apply bg-white rounded-2xl lg:rounded-3xl p-6 sm:p-8 lg:p-12 mb-6 lg:mb-8 shadow-lg border border-gray-100 transition-all duration-300 hover:shadow-xl hover:-translate-y-1;

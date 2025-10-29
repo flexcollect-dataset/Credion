@@ -949,7 +949,7 @@ function parseReportType(type) {
         } else if (type.includes('current')) {
             result.asicType = 'Current';
         } else if (type.includes('company')) {
-            result.asicType = 'Current'; // Company maps to Current as per existing logic
+            result.asicType = 'Company'; // Company maps to Current as per existing logic
         } else if (type.includes('personal')) {
             result.asicType = 'Personal';
         } else if (type.includes('document')) {
@@ -959,10 +959,10 @@ function parseReportType(type) {
         }
     } else if (type.includes('court')) {
         result.type = 'COURT';
-        result.asicType = 'Current'; // COURT maps to asic-current as per user requirement
+       
     } else if (type.includes('ato')) {
         result.type = 'ATO';
-        result.asicType = 'Current'; // ATO maps to asic-current as per user requirement
+       
     } else if (type.includes('land')) {
         result.type = 'LAND TITLE';
     } else if (type.includes('ppsr')) {
@@ -1172,7 +1172,7 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
             
             return {
                 success: true,
-                reportId: existingReport.id,
+                reportId: existingReport.id, // Use database ID as primary
                 uuid: existingReport.uid,
                 status: 'cached',
                 fromCache: true,
@@ -1199,7 +1199,7 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
             } else if (type.includes('current')) {
                 params.asic_current = '1';
             } else if (type.includes('company')) {
-                params.asic_company = '1';
+                params.asic_current = '1';
             } else if (type.includes('personal')) {
                 params.asic_personal = '1';
             } else if (type.includes('document')) {
@@ -1208,23 +1208,13 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
                 params.asic_current = '1'; // Default fallback
             }
         } else if (type.includes('court') || type.includes('ato')) {
-            // COURT and ATO map to asic-current as per user requirement
             params.asic_current = '1';
-        } else if (type === 'land') {
-            params.land = '1';
-        } else if (type === 'ppsr') {
-            params.ppsr = '1';
-        } else if (type === 'property') {
-            params.property = '1';
-        } else if (type === 'director-ppsr') {
-            params.director_ppsr = '1';
-        } else if (type === 'director-bankruptcy') {
-            params.director_bankruptcy = '1';
-        } else if (type === 'director-property') {
-            params.director_property = '1';
-        } else if (type === 'director-related') {
-            params.director_related = '1';
         }
+        
+        console.log('🔍 API CALL VALIDATION:');
+        console.log(`   Report Type: ${type}`);
+        console.log(`   Will call Alares API: ${type.includes('asic') || type.includes('court') || type.includes('ato')}`);
+        console.log(`   Final params:`, JSON.stringify(params, null, 2));
         
         let createResponse, reportData;
         
@@ -1257,7 +1247,7 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
             
             console.log('✅ PPSR API Response received and processed');
         } else {
-            console.log('Calling report API with params:', params);
+            console.log('Calling alares report API with params:', params);
             
             // Make API call to create report for non-PPSR reports
             createResponse = await axios.post(apiUrl, null, {
@@ -1375,10 +1365,10 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
             }
         }
         
-        // Return the response data
+        // Return the response data - use savedReportId as primary ID since it's always available
         return {
             success: true,
-            reportId: createResponse.data.report_id,
+            reportId: savedReport.id, // Use database ID as primary
             uuid: createResponse.data.uuid,
             status: createResponse.status,
             fromCache: false,

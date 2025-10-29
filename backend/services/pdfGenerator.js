@@ -95,6 +95,10 @@ class PDFGenerator {
             // Use the report ID from the report object - use reportId field first, then id
             const reportId = report.reportId || report.id;
             console.log('🔍 Using Report ID for queries:', reportId);
+            
+            if (!reportId) {
+                throw new Error('Report ID is required but not provided');
+            }
 
             // Handle COURT reports differently
             if (reportType === 'COURT') {

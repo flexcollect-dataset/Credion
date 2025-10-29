@@ -581,9 +581,11 @@ app.get('/health', (req, res) => {
 });
 
 // Send Reports via Email endpoint
+const emailService = require('./services/emailService');
+
 app.post('/api/send-reports', async (req, res) => {
   try {
-    const { email, reports, totalPrice } = req.body;
+    const { email, reports, totalPrice, matterName } = req.body;
 
     if (!email || !reports || !Array.isArray(reports)) {
       return res.status(400).json({
@@ -592,13 +594,17 @@ app.post('/api/send-reports', async (req, res) => {
       });
     }
 
-    // TODO: Implement actual email sending logic here
-    // For now, just return success
+    console.log(`📧 Email request received: ${email}, ${reports.length} reports`);
+
+    // Send reports via email
+    const result = await emailService.sendReports(email, reports, matterName || 'Matter');
+
     res.json({
       success: true,
       message: `Reports sent successfully to ${email}`,
-      reportsCount: reports.length,
-      totalPrice: totalPrice
+      reportsCount: result.reportsSent,
+      messageId: result.messageId,
+      totalPrice: totalPrice || 0
     });
 
   } catch (error) {
@@ -624,11 +630,11 @@ const pdfGenerator = require('./services/pdfGenerator');
              });
            }
 
-           // Allow ASIC and COURT reports
-           if (reportType !== 'ASIC' && reportType !== 'COURT') {
+           // Allow ASIC, COURT, and PPSR reports
+           if (reportType !== 'ASIC' && reportType !== 'COURT' && reportType !== 'PPSR') {
              return res.status(400).json({
                error: 'INVALID_REPORT_TYPE',
-               message: 'Only ASIC and COURT reports are currently supported'
+               message: 'Only ASIC, COURT, and PPSR reports are currently supported'
              });
            }
 
@@ -649,7 +655,15 @@ const pdfGenerator = require('./services/pdfGenerator');
            const reportData = await pdfGenerator.generateReportData(report, reportType);
 
            // Generate PDF with correct template
-           const templateName = reportType === 'ASIC' ? 'asic-report' : 'court-report';
+           let templateName;
+           if (reportType === 'ASIC') {
+             templateName = 'asic-report';
+           } else if (reportType === 'COURT') {
+             templateName = 'court-report';
+           } else if (reportType === 'PPSR') {
+             templateName = 'ppsr-report-dynamic'; // Use the PPSR template
+           }
+           
            const pdfBuffer = await pdfGenerator.generatePDF(templateName, reportData);
 
            // Generate filename based on report type
@@ -657,10 +671,12 @@ const pdfGenerator = require('./services/pdfGenerator');
            const abn = reportData.abn || 'Unknown';
            let filename;
            if (reportType === 'ASIC') {
-             const reportTypeFormatted = 'Current'; // Default to Current for ASIC
+             const reportTypeFormatted = report.asicType || 'Current';
              filename = `${abn}_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_ASIC_${reportTypeFormatted}.pdf`;
-           } else {
+           } else if (reportType === 'COURT') {
              filename = `${abn}_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_COURT.pdf`;
+           } else if (reportType === 'PPSR') {
+             filename = `${abn}_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_PPSR.pdf`;
            }
 
            // Set response headers for PDF download

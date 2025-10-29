@@ -23,6 +23,10 @@ const MatterReports: React.FC = () => {
   const [downloadingReports, setDownloadingReports] = useState<Set<number>>(new Set());
   const [updatingReports, setUpdatingReports] = useState<Set<number>>(new Set());
   const [alertingReports, setAlertingReports] = useState<Set<number>>(new Set());
+  const [emailingReports, setEmailingReports] = useState<Set<number>>(new Set());
+  const [email, setEmail] = useState('');
+  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [selectedReport, setSelectedReport] = useState<UserReport | null>(null);
 
   useEffect(() => {
     loadMatterReports();
@@ -67,7 +71,14 @@ const MatterReports: React.FC = () => {
       setDownloadingReports(prev => new Set(prev).add(report.reportId));
       
       // Determine report type based on report name or other criteria
-      const reportType = report.reportName.includes('ASIC') ? 'ASIC' : 'COURT';
+      let reportType = 'ASIC'; // Default
+      if (report.reportName.includes('ASIC')) {
+        reportType = 'ASIC';
+      } else if (report.reportName.includes('COURT')) {
+        reportType = 'COURT';
+      } else if (report.reportName.includes('PPSR')) {
+        reportType = 'PPSR';
+      }
       
       const { blob, filename } = await apiService.generatePDF(report.reportId, reportType);
       
@@ -131,6 +142,61 @@ const MatterReports: React.FC = () => {
         return newSet;
       });
     }
+  };
+
+  const handleEmailReport = (report: UserReport) => {
+    setSelectedReport(report);
+    setShowEmailModal(true);
+  };
+
+  const handleSendEmail = async () => {
+    if (!email || !email.includes('@')) {
+      alert('Please enter a valid email address');
+      return;
+    }
+
+    if (!selectedReport) {
+      alert('No report selected');
+      return;
+    }
+
+    try {
+      setEmailingReports(prev => new Set(prev).add(selectedReport.reportId));
+      
+      // Prepare single report data for email
+      const reportData = [{
+        reportId: selectedReport.reportId,
+        reportName: selectedReport.reportName,
+        type: selectedReport.reportName.includes('ASIC') ? 'ASIC' : 
+              selectedReport.reportName.includes('COURT') ? 'COURT' : 
+              selectedReport.reportName.includes('PPSR') ? 'PPSR' : 'ASIC'
+      }];
+
+      // Send report via email
+      await apiService.sendReports(email, reportData, 0, matter?.matterName || 'Matter');
+      alert(`Report sent successfully to: ${email}`);
+      
+      // Close modal and reset
+      setShowEmailModal(false);
+      setEmail('');
+      setSelectedReport(null);
+      
+    } catch (error: any) {
+      console.error('Error sending email:', error);
+      alert('Error sending report. Please try again.');
+    } finally {
+      setEmailingReports(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(selectedReport.reportId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleCloseEmailModal = () => {
+    setShowEmailModal(false);
+    setEmail('');
+    setSelectedReport(null);
   };
 
   const handleAddNewReport = () => {
@@ -223,6 +289,9 @@ const MatterReports: React.FC = () => {
                         <h3 className="text-lg font-semibold text-gray-900">
                           {report.reportName}
                         </h3>
+                        <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-medium">
+                          ID: {report.reportId}
+                        </span>
                         <span className={`ml-3 px-2 py-1 rounded-full text-xs font-medium ${
                           report.isPaid 
                             ? 'bg-green-100 text-green-800' 
@@ -275,6 +344,26 @@ const MatterReports: React.FC = () => {
                         )}
                       </button>
 
+                      {/* Email Button */}
+                      <button
+                        onClick={() => handleEmailReport(report)}
+                        disabled={emailingReports.has(report.reportId)}
+                        className={`p-2 rounded-lg transition-colors duration-200 ${
+                          emailingReports.has(report.reportId)
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-blue-50 text-blue-600 hover:bg-blue-100'
+                        }`}
+                        title="Email Report"
+                      >
+                        {emailingReports.has(report.reportId) ? (
+                          <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                          </svg>
+                        )}
+                      </button>
+
                       {/* Alert Button */}
                       <button
                         onClick={() => alertReport(report)}
@@ -300,6 +389,66 @@ const MatterReports: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Email Modal */}
+      {showEmailModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              Email Report
+            </h3>
+            
+            {selectedReport && (
+              <div className="mb-4 p-3 bg-gray-50 rounded-lg">
+                <p className="text-sm text-gray-600 mb-1">Report:</p>
+                <p className="font-medium text-gray-900">{selectedReport.reportName}</p>
+                <p className="text-xs text-gray-500">ID: {selectedReport.reportId}</p>
+              </div>
+            )}
+            
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Email Address
+              </label>
+              <input
+                type="email"
+                placeholder="Enter email address"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                autoFocus
+              />
+            </div>
+            
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleCloseEmailModal}
+                className="px-4 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSendEmail}
+                disabled={!email || emailingReports.has(selectedReport?.reportId || 0)}
+                className={`px-4 py-2 rounded-lg transition-colors duration-200 flex items-center ${
+                  !email || emailingReports.has(selectedReport?.reportId || 0)
+                    ? 'bg-gray-400 text-gray-600 cursor-not-allowed'
+                    : 'bg-blue-600 text-white hover:bg-blue-700'
+                }`}
+              >
+                {emailingReports.has(selectedReport?.reportId || 0) ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Sending...
+                  </>
+                ) : (
+                  'Send Email'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

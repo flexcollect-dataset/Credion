@@ -393,6 +393,12 @@ const Search: React.FC = () => {
       for (const item of receiptItems) {
         console.log('Processing item:', item);
         
+        // Skip generic "ASIC" if specific ASIC types are selected
+        if (item.name === 'ASIC' && selectedAsicTypes.length > 0) {
+          console.log('Skipping generic ASIC because specific ASIC types are selected');
+          continue;
+        }
+        
         // Determine the report type based on the item name
         let reportType = '';
         if (item.name.includes('ASIC')) {
@@ -461,14 +467,27 @@ const Search: React.FC = () => {
           console.log('Report data being sent to backend:', reportData);
 
           // Call backend to create report
-          const report = await apiService.createReport(reportData);
-          console.log('Report created:', report);
+          const reportResponse = await apiService.createReport(reportData);
+          console.log('🔍 Raw report response:', reportResponse);
+          console.log('🔍 reportResponse.reportId:', reportResponse.reportId);
+          console.log('🔍 reportResponse.savedReportId:', reportResponse.savedReportId);
           
-          reports.push({
-            ...report,
+          // Extract the report data and ensure we have the correct ID field
+          const reportId = reportResponse.reportId || reportResponse.savedReportId;
+          console.log('🔍 Using reportId:', reportId);
+          
+          const report = {
+            id: reportId, // Map reportId to id for consistency
+            reportId: reportId,
+            uuid: reportResponse.uuid,
+            status: reportResponse.status,
+            fromCache: reportResponse.fromCache,
             type: reportType
-          });
-        }
+          };
+          
+          console.log('🔍 Processed report:', report);
+          reports.push(report);
+      }
 
       console.log('All reports created:', reports);
       setGeneratedReports(reports);
@@ -487,9 +506,33 @@ const Search: React.FC = () => {
       return;
     }
 
+    // Check if all reports are ASIC current or historical
+    const supportedReports = generatedReports.filter(report => 
+      report.type === 'asic-current' || report.type === 'asic-historical'
+    );
+
+    if (supportedReports.length === 0) {
+      alert('Email functionality is currently only available for ASIC Current and ASIC Historical reports. Other report types are not yet implemented.');
+      return;
+    }
+
+    if (supportedReports.length < generatedReports.length) {
+      const unsupportedCount = generatedReports.length - supportedReports.length;
+      alert(`Email functionality is currently only available for ASIC Current and ASIC Historical reports. ${unsupportedCount} other report type(s) will be skipped.`);
+    }
+
     try {
-      // Send reports via email
-      await apiService.sendReports(email, generatedReports, totalPrice);
+      // Get matter name for email
+      const matterName = currentMatter?.matterName || 'Search Results';
+      
+      // Send only supported reports via email
+      // Make sure each report has the correct ID field
+      const reportsWithIds = supportedReports.map(report => ({
+        ...report,
+        reportId: report.reportId || report.id
+      }));
+      
+      await apiService.sendReports(email, reportsWithIds, totalPrice, matterName);
       alert(`Reports sent successfully to: ${email}`);
       
       // Redirect back to matter reports if we came from there
@@ -503,21 +546,48 @@ const Search: React.FC = () => {
   };
 
   const handleDownload = async () => {
+    // Check if all reports are ASIC current or historical
+    const supportedReports = generatedReports.filter(report => 
+      report.type === 'asic-current' || report.type === 'asic-historical'
+    );
+
+    if (supportedReports.length === 0) {
+      alert('Download functionality is currently only available for ASIC Current and ASIC Historical reports. Other report types are not yet implemented.');
+      return;
+    }
+
+    if (supportedReports.length < generatedReports.length) {
+      const unsupportedCount = generatedReports.length - supportedReports.length;
+      alert(`Download functionality is currently only available for ASIC Current and ASIC Historical reports. ${unsupportedCount} other report type(s) will be skipped.`);
+    }
+
     try {
-      for (const report of generatedReports) {
-        if (report.type === 'ASIC') {
-          const { blob, filename } = await apiService.generatePDF(report.reportId, report.type);
-          
-          // Create download link
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = filename;
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-          document.body.removeChild(a);
+      for (const report of supportedReports) {
+        // Determine the report type for PDF generation
+        let pdfType = 'ASIC'; // Both asic-current and asic-historical map to ASIC
+        
+        // Get the report ID from the correct field
+        const reportId = report.reportId || report.id;
+        console.log(`Downloading report: ${reportId}, Type: ${pdfType}`);
+        console.log('Report object:', report);
+        console.log('All generated reports:', generatedReports);
+        
+        if (!reportId) {
+          console.error('No report ID found in report object:', report);
+          continue;
         }
+        
+        const { blob, filename } = await apiService.generatePDF(reportId, pdfType);
+        
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
       }
       
       alert('Reports downloaded successfully!');
@@ -530,6 +600,21 @@ const Search: React.FC = () => {
       console.error('Error downloading reports:', error);
       alert('Error downloading reports. Please try again.');
     }
+  };
+
+  // Helper function to check if all reports are supported for download/email
+  const areAllReportsSupported = () => {
+    if (generatedReports.length === 0) return false;
+    return generatedReports.every(report => 
+      report.type === 'asic-current' || report.type === 'asic-historical'
+    );
+  };
+
+  // Helper function to get supported reports count
+  const getSupportedReportsCount = () => {
+    return generatedReports.filter(report => 
+      report.type === 'asic-current' || report.type === 'asic-historical'
+    ).length;
   };
 
   // Modal completion handlers
@@ -549,33 +634,6 @@ const Search: React.FC = () => {
     }
   };
 
-  // Calculate actual number of reports that will be generated
-  const getActualReportCount = () => {
-    if (selectedCategory === 'organisation') {
-      let count = 0;
-      
-      // Count main searches (but exclude ASIC if ASIC types are selected)
-      selectedOrgMainSearches.forEach(search => {
-        if (search === 'asic' && selectedAsicTypes.length > 0) {
-          // Don't count generic ASIC if specific types are selected
-        } else {
-          count++;
-        }
-      });
-      
-      // Count ASIC types
-      if (selectedOrgMainSearches.includes('asic')) {
-        count += selectedAsicTypes.length;
-      }
-      
-      // Count additional searches
-      count += selectedOrgAdditionalSearches.length;
-      
-      return count;
-    } else {
-      return selectedIndividualSearches.length;
-    }
-  };
 
   // Filter dropdown items based on search input
   const filteredDropdownItems = dropdownItems.filter(item =>
@@ -935,16 +993,29 @@ const Search: React.FC = () => {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                       />
-                      <button className="action-button send-button" onClick={handleSendEmail}>
+                      <button 
+                        className={`action-button send-button ${!areAllReportsSupported() && generatedReports.length > 0 ? 'limited-functionality' : ''}`}
+                        onClick={handleSendEmail}
+                        title={!areAllReportsSupported() && generatedReports.length > 0 ? 'Only ASIC Current/Historical reports supported' : ''}
+                      >
                         Send
                       </button>
                     </div>
                     <div className="action-box">
                       <h3>Download Report</h3>
                       <div className="reports-available">
-                        Reports available: <span>{getActualReportCount()}</span>
+                        Reports available: <span>{getSupportedReportsCount()}</span>
+                        {!areAllReportsSupported() && generatedReports.length > 0 && (
+                          <div style={{fontSize: '12px', color: '#ff6b6b', marginTop: '4px'}}>
+                            (Only ASIC Current/Historical supported)
+                          </div>
+                        )}
                       </div>
-                      <button className="action-button download-button" onClick={handleDownload}>
+                      <button 
+                        className={`action-button download-button ${!areAllReportsSupported() && generatedReports.length > 0 ? 'limited-functionality' : ''}`}
+                        onClick={handleDownload}
+                        title={!areAllReportsSupported() && generatedReports.length > 0 ? 'Only ASIC Current/Historical reports supported' : ''}
+                      >
                         Download
                       </button>
                     </div>
@@ -1065,16 +1136,29 @@ const Search: React.FC = () => {
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                     />
-                    <button className="action-button send-button" onClick={handleSendEmail}>
+                    <button 
+                      className={`action-button send-button ${!areAllReportsSupported() && generatedReports.length > 0 ? 'limited-functionality' : ''}`}
+                      onClick={handleSendEmail}
+                      title={!areAllReportsSupported() && generatedReports.length > 0 ? 'Only ASIC Current/Historical reports supported' : ''}
+                    >
                       Send
                     </button>
                   </div>
                   <div className="action-box">
                     <h3>Download Report</h3>
                     <div className="reports-available">
-                      Reports available: <span>{getActualReportCount()}</span>
+                      Reports available: <span>{getSupportedReportsCount()}</span>
+                      {!areAllReportsSupported() && generatedReports.length > 0 && (
+                        <div style={{fontSize: '12px', color: '#ff6b6b', marginTop: '4px'}}>
+                          (Only ASIC Current/Historical supported)
+                        </div>
+                      )}
                     </div>
-                    <button className="action-button download-button" onClick={handleDownload}>
+                    <button 
+                      className={`action-button download-button ${!areAllReportsSupported() && generatedReports.length > 0 ? 'limited-functionality' : ''}`}
+                      onClick={handleDownload}
+                      title={!areAllReportsSupported() && generatedReports.length > 0 ? 'Only ASIC Current/Historical reports supported' : ''}
+                    >
                       Download
                     </button>
                   </div>
