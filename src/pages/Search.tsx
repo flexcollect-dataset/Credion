@@ -396,7 +396,19 @@ const Search: React.FC = () => {
         // Determine the report type based on the item name
         let reportType = '';
         if (item.name.includes('ASIC')) {
-          reportType = item.name.includes('CURRENT') ? 'asic-current' : 'asic-historical';
+          if (item.name.includes('CURRENT')) {
+            reportType = 'asic-current';
+          } else if (item.name.includes('HISTORICAL')) {
+            reportType = 'asic-historical';
+          } else if (item.name.includes('COMPANY')) {
+            reportType = 'asic-company';
+          } else if (item.name.includes('PERSONAL')) {
+            reportType = 'asic-personal';
+          } else if (item.name.includes('DOCUMENT')) {
+            reportType = 'asic-document-search';
+          } else {
+            reportType = 'asic-current'; // Default fallback
+          }
         } else if (item.name.includes('COURT')) {
           reportType = 'court';
         } else if (item.name.includes('ATO')) {
@@ -429,6 +441,9 @@ const Search: React.FC = () => {
           throw new Error('Organization not found');
         }
 
+        console.log('🔍 FRONTEND DEBUG:');
+        console.log('   Item name:', item.name);
+        console.log('   Determined reportType:', reportType);
         console.log('Creating report for:', selectedOrg, 'Type:', reportType);
 
         // Create report via backend API
@@ -443,7 +458,7 @@ const Search: React.FC = () => {
           matterId: matterIdFromUrl ? Number(matterIdFromUrl) : currentMatter?.matterId
         };
 
-          console.log('Report data:', reportData);
+          console.log('Report data being sent to backend:', reportData);
 
           // Call backend to create report
           const report = await apiService.createReport(reportData);
