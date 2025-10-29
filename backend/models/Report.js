@@ -20,7 +20,7 @@ const Report = sequelize.define('Report', {
         field: 'is_company'
     },
     type: {
-        type: DataTypes.ENUM('ASIC', 'COURT', 'ATO', 'LAND TITLE'),
+        type: DataTypes.ENUM('ASIC', 'COURT', 'ATO', 'LAND TITLE', 'PPSR'),
         allowNull: false,
         field: 'type'
     },

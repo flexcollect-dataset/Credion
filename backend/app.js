@@ -515,22 +515,9 @@ app.get('/search', async (req, res) => {
 
 // Payment Routes
 const paymentRoutes = require('./routes/payment.routes');
-app.use('/api/payment', paymentRoutes);
+app.use('/api/payment', paymentRoutes.router);
 
-// API Routes
-const apiRoutes = require('./routes/api.routes');
-app.use('/api', apiRoutes);
-
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.status(200).json({ 
-    status: 'OK', 
-    message: 'Server is running',
-    timestamp: new Date().toISOString()
-  });
-});
-
-// Report Creation endpoint (without payment)
+// Report Creation endpoint (without payment) - MUST be before API routes to avoid conflicts
 app.post('/api/create-report', async (req, res) => {
   try {
     const { business, type, userId, matterId } = req.body;
@@ -578,6 +565,19 @@ app.post('/api/create-report', async (req, res) => {
       message: error.message || 'Failed to create report'
     });
   }
+});
+
+// API Routes
+const apiRoutes = require('./routes/api.routes');
+app.use('/api', apiRoutes);
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'OK', 
+    message: 'Server is running',
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Send Reports via Email endpoint

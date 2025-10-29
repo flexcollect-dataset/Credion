@@ -3,6 +3,7 @@ const router = express.Router();
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const { User, UserPaymentMethod, Report, UserReport } = require('../models');
 const axios = require('axios');
+const PDFGenerator = require('../services/pdfGenerator');
 
 // Middleware to check if user is authenticated
 const authenticateSession = (req, res, next) => {
@@ -121,13 +122,266 @@ async function fetchReportData(uuid, bearerToken) {
     }
 }
 
-// Function to parse and store report data in normalized tables
+// Function to fetch PPSR data from database for report generation
+async function fetchPPSRDataFromDB(reportId) {
+    const { sequelize } = require('../config/db');
+    
+    try {
+        console.log('🔍 Fetching PPSR data from database for report ID:', reportId);
+        
+        // Get the PPSR search data
+        const [searchResults] = await sequelize.query(`
+            SELECT * FROM ppsr_searches WHERE report_id = $1
+        `, {
+            bind: [reportId]
+        });
+        
+        if (searchResults.length === 0) {
+            console.log('⚠️ No PPSR search data found for report ID:', reportId);
+            return null;
+        }
+        
+        const ppsrSearch = searchResults[0];
+        const ppsrSearchId = ppsrSearch.id;
+        
+        // Get grantors
+        const [grantorResults] = await sequelize.query(`
+            SELECT * FROM ppsr_grantors WHERE ppsr_search_id = $1
+        `, {
+            bind: [ppsrSearchId]
+        });
+        
+        // Get security interests
+        const [securityInterestResults] = await sequelize.query(`
+            SELECT * FROM ppsr_security_interests WHERE ppsr_search_id = $1
+        `, {
+            bind: [ppsrSearchId]
+        });
+        
+        
+        // Get events
+        const [eventResults] = await sequelize.query(`
+            SELECT * FROM ppsr_events WHERE ppsr_search_id = $1
+        `, {
+            bind: [ppsrSearchId]
+        });
+        
+        const ppsrData = {
+            search: ppsrSearch,
+            grantors: grantorResults,
+            securityInterests: securityInterestResults,
+            financingStatements: financingStatementResults,
+            amendments: amendmentResults,
+            events: eventResults,
+            rawData: rawDataResults
+        };
+        
+        console.log('✅ PPSR data fetched successfully:', {
+            grantors: grantorResults.length,
+            securityInterests: securityInterestResults.length,
+            financingStatements: financingStatementResults.length,
+            amendments: amendmentResults.length,
+            events: eventResults.length
+        });
+        
+        return ppsrData;
+        
+    } catch (error) {
+        console.error('❌ Error fetching PPSR data from database:', error);
+        throw error;
+    }
+}
+
+// Function to parse and store PPSR structured data
+async function parsePPSRStructuredData(ppsrSearchId, reportData) {
+    const { sequelize } = require('../config/db');
+    
+    try {
+        console.log('🔍 PPSR STRUCTURED DATA: Parsing PPSR response data');
+        
+        // Parse items array if it exists (new format)
+        if (reportData.resource && reportData.resource.items && Array.isArray(reportData.resource.items)) {
+            console.log(`📊 Processing ${reportData.resource.items.length} PPSR items...`);
+            
+            for (const item of reportData.resource.items) {
+                console.log('   Processing PPSR item:', item.registrationNumber || 'Unknown');
+                
+                // Store grantors
+                if (item.grantors && Array.isArray(item.grantors)) {
+                    for (const grantor of item.grantors) {
+                        await sequelize.query(`
+                            INSERT INTO ppsr_grantors (
+                                ppsr_search_id, grantor_type, organisation_number_type, organisation_number, created_at
+                            ) VALUES ($1, $2, $3, $4, NOW())
+                        `, {
+                            bind: [
+                                ppsrSearchId,
+                                grantor.grantorType || null,
+                                grantor.organisationNumberType || null,
+                                grantor.organisationNumber || null,
+                            ]
+                        });
+                    }
+                }
+                
+                // Store security interests (each item is a security interest)
+                if (item.registrationNumber) {
+                    // Get secured party info
+                    const securedParty = item.securedParties && item.securedParties.length > 0 ? item.securedParties[0] : null;
+                    const addressForService = item.addressForService || null;
+                    
+                    await sequelize.query(`
+                        INSERT INTO ppsr_security_interests (
+                            ppsr_search_id, registration_number, registration_date, expiry_date, status,
+                            collateral_type, collateral_description, secured_party_name, secured_party_organisation_number,
+                            secured_party_address_line1, secured_party_address_line2, secured_party_suburb,
+                            secured_party_state, secured_party_postcode, secured_party_country,
+                            priority_amount, priority_currency, created_at
+                        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW())
+                    `, {
+                        bind: [
+                            ppsrSearchId,
+                            item.registrationNumber || null,
+                            item.registrationStartTime || null,
+                            item.registrationEndTime || null,
+                            'active', // status - assume active if not specified
+                            item.collateralType || null,
+                            item.collateralDescription || item.collateralSummary || null,
+                            securedParty?.organisationName || null,
+                            securedParty?.organisationNumber || null,
+                            addressForService?.mailingAddress?.line1 || null,
+                            addressForService?.mailingAddress?.line2 || null,
+                            addressForService?.mailingAddress?.locality || null,
+                            addressForService?.mailingAddress?.state || null,
+                            addressForService?.mailingAddress?.postcode || null,
+                            addressForService?.mailingAddress?.countryName || null,
+                            null, // priority_amount - not in this format
+                            'AUD' // priority_currency - default to AUD
+                        ]
+                    });
+                }
+            }
+        }
+        
+        // Also handle the old format for backward compatibility
+        else if (reportData.results && Array.isArray(reportData.results)) {
+            console.log(`📊 Processing ${reportData.results.length} PPSR results (legacy format)...`);
+            
+            for (const result of reportData.results) {
+                console.log('   Processing PPSR result:', result.registrationNumber || 'Unknown');
+                
+                // Store grantors
+                if (result.grantors && Array.isArray(result.grantors)) {
+                    for (const grantor of result.grantors) {
+                        await sequelize.query(`
+                            INSERT INTO ppsr_grantors (
+                                ppsr_search_id, grantor_type, organisation_number_type, organisation_number,
+                                individual_name, individual_date_of_birth, individual_place_of_birth, individual_gender,
+                                address_line1, address_line2, suburb, state, postcode, country, created_at
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW())
+                        `, {
+                            bind: [
+                                ppsrSearchId,
+                                grantor.grantorType || null,
+                                grantor.organisationNumberType || null,
+                                grantor.organisationNumber || null,
+                                grantor.individualName || null,
+                                grantor.individualDateOfBirth || null,
+                                grantor.individualPlaceOfBirth || null,
+                                grantor.individualGender || null,
+                                grantor.address?.addressLine1 || null,
+                                grantor.address?.addressLine2 || null,
+                                grantor.address?.suburb || null,
+                                grantor.address?.state || null,
+                                grantor.address?.postcode || null,
+                                grantor.address?.country || null
+                            ]
+                        });
+                    }
+                }
+                
+                // Store security interests
+                if (result.securityInterests && Array.isArray(result.securityInterests)) {
+                    for (const securityInterest of result.securityInterests) {
+                        await sequelize.query(`
+                            INSERT INTO ppsr_security_interests (
+                                ppsr_search_id, registration_number, registration_date, expiry_date, status,
+                                collateral_type, collateral_description, secured_party_name, secured_party_organisation_number,
+                                secured_party_address_line1, secured_party_address_line2, secured_party_suburb,
+                                secured_party_state, secured_party_postcode, secured_party_country,
+                                priority_amount, priority_currency, created_at
+                            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, NOW())
+                        `, {
+                            bind: [
+                                ppsrSearchId,
+                                securityInterest.registrationNumber || null,
+                                securityInterest.registrationDate || null,
+                                securityInterest.expiryDate || null,
+                                securityInterest.status || null,
+                                securityInterest.collateralType || null,
+                                securityInterest.collateralDescription || null,
+                                securityInterest.securedParty?.name || null,
+                                securityInterest.securedParty?.organisationNumber || null,
+                                securityInterest.securedParty?.address?.addressLine1 || null,
+                                securityInterest.securedParty?.address?.addressLine2 || null,
+                                securityInterest.securedParty?.address?.suburb || null,
+                                securityInterest.securedParty?.address?.state || null,
+                                securityInterest.securedParty?.address?.postcode || null,
+                                securityInterest.securedParty?.address?.country || null,
+                                securityInterest.priorityAmount || null,
+                                securityInterest.priorityCurrency || null
+                            ]
+                        });
+                    }
+                }
+            }
+        }
+        
+        console.log('✅ PPSR structured data parsed and stored successfully');
+        
+    } catch (error) {
+        console.error('❌ Error parsing PPSR structured data:', error);
+        throw error;
+    }
+}
+
 // Function to parse and store report data in normalized tables
 async function parseAndStoreReportData(reportId, reportData) {
     const { sequelize } = require('../config/db');
     
     try {
         console.log('🚀 NEW CODE VERSION - Parsing and storing report data for report ID:', reportId);
+        
+        // Handle PPSR data differently
+        if (reportData && (reportData.auSearchIdentifier || reportData.results)) {
+            console.log('🔍 PPSR DATA: Processing PPSR report data');
+            
+            // Store main PPSR search data
+            const [ppsrSearchResult] = await sequelize.query(`
+                INSERT INTO ppsr_searches (
+                    report_id, searchdata, created_at
+                ) VALUES ($1, $2, $3, NOW())
+                ON CONFLICT (report_id) DO UPDATE SET
+                    searchdata = EXCLUDED.searchdata,
+                    created_at =  NOW()
+                RETURNING id
+            `, {
+                bind: [
+                    reportId,
+                    JSON.stringify(reportData.criteria || [])
+                ]
+            });
+            
+            const ppsrSearchId = ppsrSearchResult[0].id;
+            console.log('✅ PPSR search data stored with ID:', ppsrSearchId);
+            
+            
+            // Parse and store structured data
+            await parsePPSRStructuredData(ppsrSearchId, reportData);
+            
+            console.log('✅ PPSR data stored successfully');
+            return; // Exit early for PPSR data
+        }
         
         // Check if ASIC extract data already exists for this report to prevent duplicates
         const [existingAsicExtract] = await sequelize.query(`
@@ -689,9 +943,13 @@ function parseReportType(type) {
     // Parse main type according to user requirements
     if (type.includes('asic')) {
         result.type = 'ASIC';
-        // All ASIC types map to 'Current' as per user requirement
-        if (type.includes('current') || type.includes('historical') || type.includes('company')) {
+        // Map ASIC types correctly based on the actual selection
+        if (type.includes('historical')) {
+            result.asicType = 'Historical';
+        } else if (type.includes('current')) {
             result.asicType = 'Current';
+        } else if (type.includes('company')) {
+            result.asicType = 'Current'; // Company maps to Current as per existing logic
         } else if (type.includes('personal')) {
             result.asicType = 'Personal';
         } else if (type.includes('document')) {
@@ -729,6 +987,89 @@ function parseReportType(type) {
     return result;
 }
 
+// Function to call PPSR API (Two-step process)
+async function callPPSRAPI(abn, businessName) {
+    try {
+        const ppsrToken = 'eyJhbGciOiJSUzI1NiIsImtpZCI6IkY2NThCODUzNDlCODc3MTVGOUM1QjI1ODgzNDcwNTVERjM5NTk1QjlSUzI1NiIsInR5cCI6ImF0K2p3dCIsIng1dCI6IjlsaTRVMG00ZHhYNXhiSllnMGNGWGZPVmxiayJ9.eyJuYmYiOjE3NjE3MjA0MjIsImV4cCI6MTc2MTcyMjIyMiwiaXNzIjoiaHR0cDovL2xvY2FsaG9zdDo2MjE5NyIsImF1ZCI6ImludGVncmF0aW9uLWFwaSIsImNsaWVudF9pZCI6ImZsZXhjb2xsZWN0LWFwaS1pbnRlZ3JhdGlvbiIsImlkIjoiMTAyNzkiLCJuYW1lIjoiZmxleGNvbGxlY3QtYXBpLWludGVncmF0aW9uIiwic3ViIjoiZThiMjEwMDYtYzgxYy00YWE4LThhMDYtYWFjMzZjNzY5ODE0Iiwibmlja25hbWUiOiJGbGV4Y29sbGVjdCBJTlRFR1JBVElPTiIsInV1aWQiOiJlOGIyMTAwNi1jODFjLTRhYTgtOGEwNi1hYWMzNmM3Njk4MTQiLCJqdGkiOiI4NzE4QjUwQTkwNjBBOTBCQTI2RTc2Rjg3RDczQ0IyMCIsImlhdCI6MTc2MTcyMDQyMiwic2NvcGUiOlsidXNlcmFjY2VzcyIsImludGVncmF0aW9uYWNjZXNzIl19.MKykx9Tz4l41exoq6M8KQwifG10nRDDjzjU7BjVK9qL8KZexLdZdGcPBAjn2VDmfgTaQDPAUiBv-qYgtJYDFWNPTwC6F7I2jUCR6oGStRt5VKDl6fxPf4wC-CRkxhQ9DI7pP_OFYNL9c4Om9BhcwIIVcaLYsFWT5JXc6ZRoc3lFXsU2Kgyui9x5Lxbh1A_3bhU--xLo5EjGBh2w_pLoVKdwOzohAml0HUb8wdqGMlBEE8XrBrh9ELTH4OA-g6qaFdx-Ws1PdJDsB22y74C0zwlvfSBC-9lZs7kZlr-ab5LuGYshb4HpbRrjLYP6t41euoUD-yQ3PvpWOqg_muquJ_A';
+        
+        // Remove first 2 characters from ABN to get ACN
+        const acn = abn.substring(2);
+        console.log(acn)
+        // Step 1: Submit search request
+        const submitUrl = 'https://uat-gateway.ppsrcloud.com/api/b2b/ausearch/submit-grantor-session-cmd';
+        const requestData = {
+            customerRequestId: `flexcollect-001`,
+            clientReference: "Credion Company Search",
+            pointInTime: null,
+            criteria: [
+                {
+                    grantorType: "organisation",
+                    organisationNumberType: "acn",
+                    organisationNumber: "146939013"
+                }
+            ]
+        };
+
+        console.log('🔍 PPSR STEP 1 - Submit Search:');
+        console.log('   Original ABN:', abn);
+        console.log('   ACN (ABN - first 2 chars):', acn);
+        console.log('   Business Name:', businessName);
+        console.log('   Request Data:', JSON.stringify(requestData, null, 2));
+
+        // Step 1: Submit the search request
+        const submitResponse = await axios.post(submitUrl, requestData, {
+            headers: {
+                'Authorization': `Bearer ${ppsrToken}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 30000 // 30 second timeout
+        });
+
+        console.log('✅ PPSR Submit Response:', submitResponse.data);
+        
+        // Extract auSearchIdentifier from the response
+        // The response contains ppsrCloudId which should be used as auSearchIdentifier
+        const auSearchIdentifier = submitResponse.data.resource?.ppsrCloudId || submitResponse.data.auSearchIdentifier;
+        
+        if (!auSearchIdentifier) {
+            throw new Error('No auSearchIdentifier (ppsrCloudId) returned from PPSR submit request');
+        }
+        
+        console.log('🔍 PPSR STEP 2 - Fetch Data:');
+        console.log('   auSearchIdentifier:', auSearchIdentifier);
+        
+        // Step 2: Fetch actual data using the auSearchIdentifier
+        const fetchUrl = 'https://uat-gateway.ppsrcloud.com/api/b2b/ausearch/result-details';
+        const fetchData = {
+            auSearchIdentifier: auSearchIdentifier,
+            pageNumber: 1,
+            pageSize: 50
+        };
+
+        console.log('   Fetch Data:', JSON.stringify(fetchData, null, 2));
+
+        const response = await axios.post(fetchUrl, fetchData, {
+            headers: {
+                'Authorization': `Bearer ${ppsrToken}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 30000 // 30 second timeout
+        });
+
+        console.log('✅ PPSR API Response:', response.data);
+        return response.data;
+    } catch (error) {
+        console.error('❌ PPSR API Error:', error);
+        if (error.response) {
+            throw new Error(`PPSR API error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`);
+        } else if (error.request) {
+            throw new Error('PPSR API request failed - no response received');
+        } else {
+            throw new Error(`PPSR API call failed: ${error.message}`);
+        }
+    }
+}
+
 // Function to create report via external API
 async function createReport({ business, type, userId, paymentIntentId, matterId }) {
     try {
@@ -751,6 +1092,12 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
         
         // Parse the type into granular fields for cache checking
         const parsedType = parseReportType(type);
+        
+        // Debug logging for ASIC type parsing
+        console.log(`🔍 ASIC TYPE PARSING DEBUG:`);
+        console.log(`   Input type: "${type}"`);
+        console.log(`   Parsed type: "${parsedType.type}"`);
+        console.log(`   Parsed asicType: "${parsedType.asicType}"`);
         
         // Check if report already exists in Reports table (by ABN + type)
         console.log(`🔍 Checking Reports table for existing report by ABN + type...`);
@@ -846,8 +1193,22 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
         };
         
         // Add report type parameters based on the type
-        // According to user requirements: ASIC, COURT, ATO all map to asic-current
-        if (type.includes('asic') || type.includes('court') || type.includes('ato')) {
+        if (type.includes('asic')) {
+            if (type.includes('historical')) {
+                params.asic_historical = '1';
+            } else if (type.includes('current')) {
+                params.asic_current = '1';
+            } else if (type.includes('company')) {
+                params.asic_company = '1';
+            } else if (type.includes('personal')) {
+                params.asic_personal = '1';
+            } else if (type.includes('document')) {
+                params.asic_document_search = '1';
+            } else {
+                params.asic_current = '1'; // Default fallback
+            }
+        } else if (type.includes('court') || type.includes('ato')) {
+            // COURT and ATO map to asic-current as per user requirement
             params.asic_current = '1';
         } else if (type === 'land') {
             params.land = '1';
@@ -865,22 +1226,54 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
             params.director_related = '1';
         }
         
-        console.log('Calling report API with params:', params);
+        let createResponse, reportData;
         
-        // Make API call to create report
-        const createResponse = await axios.post(apiUrl, null, {
-            params: params,
-            headers: {
-                'Authorization': `Bearer ${bearerToken}`,
-                'Content-Type': 'application/json'
-            },
-            timeout: 30000 // 30 second timeout
-        });
-        
-        console.log('Report creation API response:', createResponse.data);
-        
-        // Now call GET API to fetch the report data
-        const reportData = await fetchReportData(createResponse.data.uuid, bearerToken);
+        // Handle PPSR reports differently
+        if (type === 'ppsr') {
+            console.log('🔍 PPSR REPORT: Calling PPSR API directly');
+            
+            // For PPSR, we use the ABN and remove first 2 characters to get ACN
+            // Call PPSR API directly with ABN
+            const ppsrResponse = await callPPSRAPI(abn, business.Name || business.name);
+            
+            // Extract ppsrCloudId from the PPSR response to use as uid
+            const ppsrCloudId = ppsrResponse.resource?.searchCriteriaSummaries?.[0]?.customerRequestId || 
+                               ppsrResponse.resource?.ppsrCloudId || 
+                               `ppsr-${Date.now()}-${abn}`;
+            
+            console.log('🔍 PPSR Cloud ID extracted:', ppsrCloudId);
+            
+            // Create a mock response structure for PPSR
+            createResponse = {
+                data: {
+                    uuid: ppsrCloudId, // Use ppsrCloudId as the uid
+                    report_id: `ppsr-${Date.now()}-${abn}`,
+                    status: 'completed'
+                }
+            };
+            
+            // Use PPSR response as report data
+            reportData = ppsrResponse;
+            
+            console.log('✅ PPSR API Response received and processed');
+        } else {
+            console.log('Calling report API with params:', params);
+            
+            // Make API call to create report for non-PPSR reports
+            createResponse = await axios.post(apiUrl, null, {
+                params: params,
+                headers: {
+                    'Authorization': `Bearer ${bearerToken}`,
+                    'Content-Type': 'application/json'
+                },
+                timeout: 30000 // 30 second timeout
+            });
+            
+            console.log('Report creation API response:', createResponse.data);
+            
+            // Now call GET API to fetch the report data
+            reportData = await fetchReportData(createResponse.data.uuid, bearerToken);
+        }
         
         // Store the report data in database (basic report record)
         const savedReport = await Report.create({
@@ -894,6 +1287,10 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
             isAlert: true
         });
         
+        console.log('🔍 DATABASE SAVE DEBUG:');
+        console.log(`   Saved report ID: ${savedReport.id}`);
+        console.log(`   Saved type: "${savedReport.type}"`);
+        console.log(`   Saved asicType: "${savedReport.asicType}"`);
         console.log('Report data saved to database:', savedReport.id);
         
         // Create UserReport record for user-specific tracking
@@ -921,6 +1318,63 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
             // Continue with the process even if structured storage fails
         }
         
+        // Generate PDF for PPSR reports
+        if (type === 'ppsr') {
+            try {
+                console.log('🔍 PPSR PDF: Generating PDF for PPSR report');
+                
+                // Fetch structured PPSR data from database
+                const ppsrData = await fetchPPSRDataFromDB(savedReport.id);
+                
+                if (!ppsrData) {
+                    console.log('⚠️ No PPSR data found in database, using raw API data');
+                }
+                
+                const pdfGenerator = new PDFGenerator();
+                const pdfData = {
+                    reportData: reportData, // Keep raw data as fallback
+                    ppsrData: ppsrData, // Add structured PPSR data
+                    business: business,
+                    abn: abn,
+                    reportId: savedReport.id,
+                    generatedAt: new Date().toISOString()
+                };
+                
+                // Generate PDF using PPSR dynamic template
+                const pdfBuffer = await pdfGenerator.generatePDF('PPSR-report-dynamic', pdfData, {
+                    format: 'A4',
+                    printBackground: true
+                });
+                
+                // Save PDF to file system
+                const fs = require('fs');
+                const path = require('path');
+                const pdfDir = path.join(__dirname, '..', 'pdfs');
+                
+                // Create pdfs directory if it doesn't exist
+                if (!fs.existsSync(pdfDir)) {
+                    fs.mkdirSync(pdfDir, { recursive: true });
+                }
+                
+                const pdfFilename = `PPSR_${abn}_${business.Name || business.name || 'Unknown'}_${savedReport.id}.pdf`;
+                const pdfPath = path.join(pdfDir, pdfFilename);
+                
+                fs.writeFileSync(pdfPath, pdfBuffer);
+                
+                console.log(`✅ PPSR PDF saved: ${pdfPath}`);
+                
+                // Update UserReport with PDF filename
+                await UserReport.update(
+                    { reportName: pdfFilename },
+                    { where: { reportId: savedReport.id } }
+                );
+                
+            } catch (pdfError) {
+                console.error('❌ PPSR PDF generation failed:', pdfError);
+                // Continue even if PDF generation fails
+            }
+        }
+        
         // Return the response data
         return {
             success: true,
@@ -934,7 +1388,7 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
         
     } catch (error) {
         console.error('Error creating report:', error);
-        
+        console.log("mital");
         if (error.response) {
             // API returned an error response
             throw new Error(`Report API error: ${error.response.status} - ${error.response.data?.message || error.response.statusText}`);
@@ -1479,7 +1933,13 @@ router.post('/create-payment-intent', authenticateSession, async (req, res) => {
     }
 });
 
-module.exports = router;
-module.exports.createReport = createReport;
-module.exports.checkReportCache = checkReportCache;
+// Export functions for testing
+module.exports = {
+    router,
+    callPPSRAPI,
+    createReport,
+    parseAndStoreReportData,
+    checkReportCache,
+    fetchPPSRDataFromDB
+};
 

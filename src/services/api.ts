@@ -317,7 +317,7 @@ class ApiService {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to generate PDF');
+        throw new Error(errorData.message || 'Failed to generate PDFf');
       }
 
       // Extract filename from Content-Disposition header
@@ -343,7 +343,7 @@ class ApiService {
       const blob = await response.blob();
       return { blob, filename };
     } catch (error) {
-      console.error('Error generating PDF:', error);
+      console.error('Error generating PDFfff:', error);
       throw error;
     }
   }
