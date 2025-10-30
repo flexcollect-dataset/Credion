@@ -473,15 +473,15 @@ const Search: React.FC = () => {
           console.log('🔍 reportResponse.savedReportId:', reportResponse.savedReportId);
           
           // Extract the report data and ensure we have the correct ID field
-          const reportId = reportResponse.reportId || reportResponse.savedReportId;
+          const reportId = reportResponse.report.reportId;
           console.log('🔍 Using reportId:', reportId);
           
           const report = {
             id: reportId, // Map reportId to id for consistency
             reportId: reportId,
-            uuid: reportResponse.uuid,
-            status: reportResponse.status,
-            fromCache: reportResponse.fromCache,
+            uuid: reportResponse.report.uuid,
+            status: reportResponse.report.status,
+            fromCache: reportResponse.report.fromCache,
             type: reportType
           };
           
@@ -548,7 +548,7 @@ const Search: React.FC = () => {
   const handleDownload = async () => {
     // Check if all reports are ASIC current or historical
     const supportedReports = generatedReports.filter(report => 
-      report.type === 'asic-current' || report.type === 'asic-historical'
+      report.type === 'asic-current' || report.type === 'asic-historical' || report.type === 'ppsr'
     );
 
     if (supportedReports.length === 0) {
@@ -579,6 +579,7 @@ const Search: React.FC = () => {
         
         const { blob, filename } = await apiService.generatePDF(reportId, pdfType);
         
+        
         // Create download link
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -606,14 +607,14 @@ const Search: React.FC = () => {
   const areAllReportsSupported = () => {
     if (generatedReports.length === 0) return false;
     return generatedReports.every(report => 
-      report.type === 'asic-current' || report.type === 'asic-historical'
+      report.type === 'asic-current' || report.type === 'asic-historical' || report.type === 'ppsr'
     );
   };
 
   // Helper function to get supported reports count
   const getSupportedReportsCount = () => {
     return generatedReports.filter(report => 
-      report.type === 'asic-current' || report.type === 'asic-historical'
+      report.type === 'asic-current' || report.type === 'asic-historical' || report.type === 'ppsr'
     ).length;
   };
 
