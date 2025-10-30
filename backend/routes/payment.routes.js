@@ -428,25 +428,25 @@ async function parseAndStoreReportData(reportId, reportData) {
             
             // Log the complete data structure for debugging
             console.log('🔍 COMPLETE REPORT DATA:', JSON.stringify(reportData, null, 2));
-            
-            // 1. Store Entity data
-            if (reportData.entity) {
-                const entityData = reportData.entity;
+        
+        // 1. Store Entity data
+        if (reportData.entity) {
+            const entityData = reportData.entity;
                 console.log('📝 Storing entity data for report ID:', reportId);
-                await sequelize.query(`
-                    INSERT INTO entities (
-                        report_id, abn, acn, is_arbn, abr_gst_registration_date, 
-                        abr_gst_status, abr_postcode, abr_state, abr_status, 
-                        asic_date_of_registration, asic_status, document_number, 
-                        former_names, name, reference, review_date, name_start_at, 
-                        registered_in, organisation_type, disclosing_entity, 
-                        organisation_class, organisation_sub_class
-                    ) VALUES (
-                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
-                    )
-                `, {
-                    bind: [
-                        reportId,
+            await sequelize.query(`
+                INSERT INTO entities (
+                    report_id, abn, acn, is_arbn, abr_gst_registration_date, 
+                    abr_gst_status, abr_postcode, abr_state, abr_status, 
+                    asic_date_of_registration, asic_status, document_number, 
+                    former_names, name, reference, review_date, name_start_at, 
+                    registered_in, organisation_type, disclosing_entity, 
+                    organisation_class, organisation_sub_class
+                ) VALUES (
+                    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22
+                )
+            `, {
+                bind: [
+                    reportId,
                         entityData.abn || null,
                         entityData.acn || null,
                         entityData.is_arbn || null,
@@ -458,7 +458,7 @@ async function parseAndStoreReportData(reportId, reportData) {
                         entityData.asic_date_of_registration || null,
                         entityData.asic_status || null,
                         entityData.document_number || null,
-                        JSON.stringify(entityData.former_names || []),
+                    JSON.stringify(entityData.former_names || []),
                         entityData.name || null,
                         entityData.reference || null,
                         entityData.review_date || null,
@@ -468,19 +468,19 @@ async function parseAndStoreReportData(reportId, reportData) {
                         entityData.disclosing_entity || null,
                         entityData.organisation_class || null,
                         entityData.organisation_sub_class || null
-                    ]
-                });
-                console.log('✅ Entity data stored');
-            }
-            
-            // 2. Store ASIC Extract data
+                ]
+            });
+            console.log('✅ Entity data stored');
+        }
+        
+        // 2. Store ASIC Extract data
             console.log('🔍 DEBUG: Checking asic_extracts data...');
             console.log('   asic_extracts exists:', !!reportData.asic_extracts);
             console.log('   asic_extracts is array:', Array.isArray(reportData.asic_extracts));
             console.log('   asic_extracts length:', reportData.asic_extracts?.length || 0);
             console.log('   asic_extracts value:', reportData.asic_extracts);
             
-            if (reportData.asic_extracts) {
+        if (reportData.asic_extracts) {
                 console.log('   asic_extracts sample:', JSON.stringify(reportData.asic_extracts[0], null, 2));
             }
             
@@ -492,31 +492,31 @@ async function parseAndStoreReportData(reportId, reportData) {
                     console.log('   ASIC extract keys:', Object.keys(asicExtract));
                     
                                     try {
-                                        const [asicResult] = await sequelize.query(`
-                                            INSERT INTO asic_extracts (report_id, external_id) 
-                                            VALUES ($1, $2) 
-                                            RETURNING asic_extract_id
-                                        `, {
+            const [asicResult] = await sequelize.query(`
+                INSERT INTO asic_extracts (report_id, external_id) 
+                VALUES ($1, $2) 
+                RETURNING asic_extract_id
+            `, {
                                             bind: [reportId, asicExtract.id || null]
-                                        });
-                                        const asicExtractId = asicResult[0].asic_extract_id;
-                                        console.log('✅ ASIC Extract stored with ID:', asicExtractId);
-                        
-                        // 3. Store Addresses
-                        if (asicExtract.addresses && Array.isArray(asicExtract.addresses)) {
+            });
+            const asicExtractId = asicResult[0].asic_extract_id;
+            console.log('✅ ASIC Extract stored with ID:', asicExtractId);
+            
+            // 3. Store Addresses
+            if (asicExtract.addresses && Array.isArray(asicExtract.addresses)) {
                             console.log('   Storing', asicExtract.addresses.length, 'addresses...');
-                            for (const address of asicExtract.addresses) {
-                                await sequelize.query(`
-                                    INSERT INTO addresses (
-                                        asic_extract_id, type, entity, address, care_of, address_1, 
-                                        address_2, suburb, state, postcode, country, status, 
-                                        start_date, end_date, document_number, address_category
-                                    ) VALUES (
-                                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-                                    )
-                                `, {
-                                    bind: [
-                                        asicExtractId,
+                for (const address of asicExtract.addresses) {
+                    await sequelize.query(`
+                        INSERT INTO addresses (
+                            asic_extract_id, type, entity, address, care_of, address_1, 
+                            address_2, suburb, state, postcode, country, status, 
+                            start_date, end_date, document_number, address_category
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
+                        )
+                    `, {
+                        bind: [
+                            asicExtractId,
                                         address.type || null,
                                         address.entity || null,
                                         address.address || null,
@@ -531,12 +531,12 @@ async function parseAndStoreReportData(reportId, reportData) {
                                         address.start_date || null,
                                         address.end_date || null,
                                         address.document_number || null,
-                                        'company'
-                                    ]
-                                });
-                            }
-                            console.log('✅ Addresses stored');
-                        }
+                            'company'
+                        ]
+                    });
+                }
+                console.log('✅ Addresses stored');
+            }
                         
                         // 3b. Store Contact Addresses
                         if (asicExtract.contact_addresses && Array.isArray(asicExtract.contact_addresses)) {
@@ -573,22 +573,22 @@ async function parseAndStoreReportData(reportId, reportData) {
                             }
                             console.log('✅ Contact Addresses stored');
                         }
-                        
-                        // 4. Store Directors
-                        if (asicExtract.directors && Array.isArray(asicExtract.directors)) {
+            
+            // 4. Store Directors
+            if (asicExtract.directors && Array.isArray(asicExtract.directors)) {
                             console.log('   Storing', asicExtract.directors.length, 'directors...');
-                            for (const director of asicExtract.directors) {
-                                await sequelize.query(`
-                                    INSERT INTO directors (
-                                        asic_extract_id, type, name, dob, place_of_birth, 
-                                        director_id_external, document_number, start_date, 
-                                        end_date, status, address_data
-                                    ) VALUES (
-                                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-                                    )
-                                `, {
-                                    bind: [
-                                        asicExtractId,
+                for (const director of asicExtract.directors) {
+                    await sequelize.query(`
+                        INSERT INTO directors (
+                            asic_extract_id, type, name, dob, place_of_birth, 
+                            director_id_external, document_number, start_date, 
+                            end_date, status, address_data
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+                        )
+                    `, {
+                        bind: [
+                            asicExtractId,
                                         director.type || null,
                                         director.name || null,
                                         director.dob || null,
@@ -598,7 +598,7 @@ async function parseAndStoreReportData(reportId, reportData) {
                                         director.start_date || null,
                                         director.end_date || null,
                                         director.status || null,
-                                        director.address ? JSON.stringify(director.address) : null
+                            director.address ? JSON.stringify(director.address) : null
                                     ]
                                 });
                                 
@@ -633,25 +633,25 @@ async function parseAndStoreReportData(reportId, reportData) {
                                         ]
                                     });
                                 }
-                            }
-                            console.log('✅ Directors stored');
-                        }
-                        
-                        // 5. Store Shareholders
-                        if (asicExtract.shareholders && Array.isArray(asicExtract.shareholders)) {
+                }
+                console.log('✅ Directors stored');
+            }
+            
+            // 5. Store Shareholders
+            if (asicExtract.shareholders && Array.isArray(asicExtract.shareholders)) {
                             console.log('   Storing', asicExtract.shareholders.length, 'shareholders...');
-                            for (const shareholder of asicExtract.shareholders) {
-                                await sequelize.query(`
-                                    INSERT INTO shareholders (
-                                        asic_extract_id, name, acn, class, number_held, 
-                                        percentage_held, document_number, beneficially_owned, 
-                                        fully_paid, jointly_held, status, address_data
-                                    ) VALUES (
-                                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
-                                    )
-                                `, {
-                                    bind: [
-                                        asicExtractId,
+                for (const shareholder of asicExtract.shareholders) {
+                    await sequelize.query(`
+                        INSERT INTO shareholders (
+                            asic_extract_id, name, acn, class, number_held, 
+                            percentage_held, document_number, beneficially_owned, 
+                            fully_paid, jointly_held, status, address_data
+                        ) VALUES (
+                            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+                        )
+                    `, {
+                        bind: [
+                            asicExtractId,
                                         shareholder.name || null,
                                         shareholder.acn || null,
                                         shareholder.class || null,
@@ -662,23 +662,23 @@ async function parseAndStoreReportData(reportId, reportData) {
                                         shareholder.fully_paid || null,
                                         shareholder.jointly_held || null,
                                         shareholder.status || null,
-                                        shareholder.address ? JSON.stringify(shareholder.address) : null
-                                    ]
-                                });
-                                
+                            shareholder.address ? JSON.stringify(shareholder.address) : null
+                        ]
+                    });
+            
                                 // Store Shareholder Address in addresses table
                                 if (shareholder.address) {
-                                    await sequelize.query(`
+                    await sequelize.query(`
                                         INSERT INTO addresses (
                                             asic_extract_id, type, entity, address, care_of, address_1, 
                                             address_2, suburb, state, postcode, country, status, 
                                             start_date, end_date, document_number, address_category
-                                        ) VALUES (
+                        ) VALUES (
                                             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-                                        )
-                                    `, {
-                                        bind: [
-                                            asicExtractId,
+                        )
+                    `, {
+                        bind: [
+                            asicExtractId,
                                             shareholder.address.type || 'Shareholder Address',
                                             shareholder.address.entity || 'Shareholder',
                                             shareholder.address.address || null,
@@ -694,9 +694,9 @@ async function parseAndStoreReportData(reportId, reportData) {
                                             shareholder.end_date || null,
                                             shareholder.document_number || null,
                                             'shareholder'
-                                        ]
-                                    });
-                                }
+                        ]
+                    });
+                }
                             }
                             console.log('✅ Shareholders stored');
                         }
@@ -705,17 +705,17 @@ async function parseAndStoreReportData(reportId, reportData) {
                         if (asicExtract.secretaries && Array.isArray(asicExtract.secretaries)) {
                             console.log('   Storing', asicExtract.secretaries.length, 'secretaries...');
                             for (const secretary of asicExtract.secretaries) {
-                                await sequelize.query(`
+                    await sequelize.query(`
                                     INSERT INTO secretaries (
                                         asic_extract_id, type, name, dob, place_of_birth, 
                                         secretary_id_external, document_number, start_date, 
                                         end_date, status, address_data
-                                    ) VALUES (
+                        ) VALUES (
                                         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-                                    )
-                                `, {
-                                    bind: [
-                                        asicExtractId,
+                        )
+                    `, {
+                        bind: [
+                            asicExtractId,
                                         secretary.type || null,
                                         secretary.name || null,
                                         secretary.dob || null,
@@ -731,16 +731,16 @@ async function parseAndStoreReportData(reportId, reportData) {
                                 
                                 // Store Secretary Address in addresses table
                                 if (secretary.address) {
-                                    await sequelize.query(`
+                await sequelize.query(`
                                         INSERT INTO addresses (
                                             asic_extract_id, type, entity, address, care_of, address_1, 
                                             address_2, suburb, state, postcode, country, status, 
                                             start_date, end_date, document_number, address_category
-                                        ) VALUES (
+                    ) VALUES (
                                             $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16
-                                        )
-                                    `, {
-                                        bind: [
+                    )
+                `, {
+                    bind: [
                                             asicExtractId,
                                             secretary.address.type || 'Secretary Address',
                                             secretary.address.entity || 'Secretary',
@@ -757,9 +757,9 @@ async function parseAndStoreReportData(reportId, reportData) {
                                             secretary.end_date || null,
                                             secretary.document_number || null,
                                             'secretary'
-                                        ]
-                                    });
-                                }
+                    ]
+                });
+            }
                             }
                             console.log('✅ Secretaries stored');
                         }
@@ -768,15 +768,15 @@ async function parseAndStoreReportData(reportId, reportData) {
                         if (asicExtract.share_structures && Array.isArray(asicExtract.share_structures)) {
                             console.log('   Storing', asicExtract.share_structures.length, 'share structures...');
                             for (const shareStructure of asicExtract.share_structures) {
-                                await sequelize.query(`
+                        await sequelize.query(`
                                     INSERT INTO share_structures (
                                         asic_extract_id, class_code, class_description, status, 
                                         share_count, amount_paid, amount_due, document_number
-                                    ) VALUES (
+                            ) VALUES (
                                         $1, $2, $3, $4, $5, $6, $7, $8
-                                    )
-                                `, {
-                                    bind: [
+                            )
+                        `, {
+                            bind: [
                                         asicExtractId,
                                         shareStructure.class_code || null,
                                         shareStructure.class_description || null,
@@ -785,9 +785,9 @@ async function parseAndStoreReportData(reportId, reportData) {
                                         shareStructure.amount_paid || null,
                                         shareStructure.amount_due || null,
                                         shareStructure.document_number || null
-                                    ]
-                                });
-                            }
+                            ]
+                        });
+                    }
                             console.log('✅ Share Structures stored');
                         }
                         
@@ -795,15 +795,15 @@ async function parseAndStoreReportData(reportId, reportData) {
                         if (asicExtract.documents && Array.isArray(asicExtract.documents)) {
                             console.log('   Storing', asicExtract.documents.length, 'documents...');
                             for (const document of asicExtract.documents) {
-                                await sequelize.query(`
+                        await sequelize.query(`
                                     INSERT INTO documents (
                                         asic_extract_id, type, description, document_number, 
                                         form_code, page_count, effective_at, processed_at, received_at
-                                    ) VALUES (
+                            ) VALUES (
                                         $1, $2, $3, $4, $5, $6, $7, $8, $9
-                                    )
-                                `, {
-                                    bind: [
+                            )
+                        `, {
+                            bind: [
                                         asicExtractId,
                                         document.type || null,
                                         document.description || null,
@@ -813,9 +813,9 @@ async function parseAndStoreReportData(reportId, reportData) {
                                         document.effective_at || null,
                                         document.processed_at || null,
                                         document.received_at || null
-                                    ]
-                                });
-                            }
+                            ]
+                        });
+                    }
                             console.log('✅ Documents stored');
                         }
                         
@@ -878,21 +878,21 @@ async function parseAndStoreReportData(reportId, reportData) {
             }
             
             // 9. Store Insolvencies
-            if (reportData.insolvencies && typeof reportData.insolvencies === 'object') {
+        if (reportData.insolvencies && typeof reportData.insolvencies === 'object') {
                 console.log('📊 Processing insolvencies data...');
                 for (const [insolvencyId, insolvencyData] of Object.entries(reportData.insolvencies)) {
                     try {
                         await sequelize.query(`
-                            INSERT INTO insolvencies (
-                                report_id, uuid, type, notification_time, court_name, case_type, 
-                                case_number, asic_notice_id, case_name, total_parties, 
-                                internal_reference, name, other_names, insolvency_risk_factor, match_on
-                            ) VALUES (
-                                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
+                    INSERT INTO insolvencies (
+                        report_id, uuid, type, notification_time, court_name, case_type, 
+                        case_number, asic_notice_id, case_name, total_parties, 
+                        internal_reference, name, other_names, insolvency_risk_factor, match_on
+                    ) VALUES (
+                        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15
                             )
-                        `, {
-                            bind: [
-                                reportId,
+                `, {
+                    bind: [
+                        reportId,
                                 insolvencyData.uuid || null,
                                 insolvencyData.type || null,
                                 insolvencyData.notification_time || null,
@@ -922,14 +922,14 @@ async function parseAndStoreReportData(reportId, reportData) {
             if (reportData.current_tax_debt) {
                 console.log('📊 Processing current tax debt data...');
                 try {
-                    await sequelize.query(`
+                        await sequelize.query(`
                         INSERT INTO tax_debts (
                             report_id, date, amount, status, ato_added_at, ato_updated_at
-                        ) VALUES (
+                            ) VALUES (
                             $1, $2, $3, $4, $5, $6
-                        )
-                    `, {
-                        bind: [
+                            )
+                        `, {
+                            bind: [
                             reportId,
                             reportData.current_tax_debt.date || null,
                             reportData.current_tax_debt.amount || null,
@@ -944,9 +944,9 @@ async function parseAndStoreReportData(reportId, reportData) {
                 }
             } else {
                 console.log('⚠️ No current tax debt data found');
-            }
-            
-            console.log('🎉 All report data parsed and stored successfully!');
+        }
+        
+        console.log('🎉 All report data parsed and stored successfully!');
         }
     } catch (error) {
         console.error('❌ Error parsing and storing report data:', error);
@@ -1210,7 +1210,7 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
         // Add report type parameters based on the type
         if (type.includes('asic')) {
             if (type.includes('historical')) {
-                params.asic_historical = '1';
+            params.asic_historical = '1';
             } else if (type.includes('current')) {
                 params.asic_current = '1';
             } else if (type.includes('company')) {
@@ -1262,18 +1262,31 @@ async function createReport({ business, type, userId, paymentIntentId, matterId 
 
             // Make API call to create report for non-PPSR reports
             createResponse = await axios.post(apiUrl, null, {
-                params: params,
-                headers: {
-                    'Authorization': `Bearer ${bearerToken}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 30000 // 30 second timeout
-            });
-            
-            console.log('Report creation API response:', createResponse.data);
-            
-            // Now call GET API to fetch the report data
+            params: params,
+            headers: {
+                'Authorization': `Bearer ${bearerToken}`,
+                'Content-Type': 'application/json'
+            },
+            timeout: 30000 // 30 second timeout
+        });
+        
+        console.log('Report creation API response:', createResponse.data);
+        
+        // Now call GET API to fetch the report data
             reportData = await fetchReportData(createResponse.data.uuid, bearerToken);
+
+            // Retry fetching if ASIC extracts are not yet populated (eventual consistency)
+            let attempts = 0;
+            while (
+                reportData &&
+                Array.isArray(reportData.asic_extracts) &&
+                reportData.asic_extracts.length === 0 &&
+                attempts < 5
+            ) {
+                attempts += 1;
+                await new Promise(r => setTimeout(r, 2000));
+                reportData = await fetchReportData(createResponse.data.uuid, bearerToken);
+            }
         }
         
         // Store the report data in database (basic report record)

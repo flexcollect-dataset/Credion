@@ -506,31 +506,41 @@ const Search: React.FC = () => {
       return;
     }
 
-    // Check if all reports are ASIC current or historical
+    // Filter supported like MatterReports (ASIC current/historical, PPSR, COURT)
     const supportedReports = generatedReports.filter(report => 
-      report.type === 'asic-current' || report.type === 'asic-historical'
+      report.type === 'asic-current' || report.type === 'asic-historical' || report.type === 'ppsr' || report.type === 'court'
     );
 
     if (supportedReports.length === 0) {
-      alert('Email functionality is currently only available for ASIC Current and ASIC Historical reports. Other report types are not yet implemented.');
+      alert('Email is currently available for ASIC Current/Historical, PPSR, and COURT reports.');
       return;
     }
 
     if (supportedReports.length < generatedReports.length) {
       const unsupportedCount = generatedReports.length - supportedReports.length;
-      alert(`Email functionality is currently only available for ASIC Current and ASIC Historical reports. ${unsupportedCount} other report type(s) will be skipped.`);
+      alert(`Email will include only ASIC Current/Historical, PPSR, and COURT. ${unsupportedCount} other report type(s) will be skipped.`);
     }
 
     try {
       // Get matter name for email
       const matterName = currentMatter?.matterName || 'Search Results';
       
-      // Send only supported reports via email
-      // Make sure each report has the correct ID field
-      const reportsWithIds = supportedReports.map(report => ({
-        ...report,
-        reportId: report.reportId || report.id
-      }));
+      // Build payload like MatterReports: ensure correct ID and report type mapping
+      const reportsWithIds = supportedReports.map((report) => {
+        const reportId = report.reportId ?? report.id;
+        // Map to backend PDF types
+        let mappedType = 'ASIC';
+        if (report.type === 'ppsr') mappedType = 'PPSR';
+        else if (report.type === 'court') mappedType = 'COURT';
+        else mappedType = 'ASIC'; // asic-current / asic-historical
+        
+        return {
+          ...report,
+          id: reportId,
+          reportId: reportId,
+          type: mappedType
+        };
+      });
       
       await apiService.sendReports(email, reportsWithIds, totalPrice, matterName);
       alert(`Reports sent successfully to: ${email}`);
@@ -540,7 +550,6 @@ const Search: React.FC = () => {
         navigate(`/matter-reports/${matterIdFromUrl}`);
       }
     } catch (error) {
-      console.error('Error sending email:', error);
       alert('Error sending reports. Please try again.');
     }
   };
@@ -548,37 +557,40 @@ const Search: React.FC = () => {
   const handleDownload = async () => {
     // Check if all reports are ASIC current or historical
     const supportedReports = generatedReports.filter(report => 
-      report.type === 'asic-current' || report.type === 'asic-historical' || report.type === 'ppsr'
+      report.type === 'asic-current' || report.type === 'asic-historical' || report.type === 'ppsr' || report.type === 'court'
     );
 
     if (supportedReports.length === 0) {
-      alert('Download functionality is currently only available for ASIC Current and ASIC Historical reports. Other report types are not yet implemented.');
+      alert('Download functionality is currently only available for ASIC Current/Historical, PPSR, and COURT reports.');
       return;
     }
 
     if (supportedReports.length < generatedReports.length) {
       const unsupportedCount = generatedReports.length - supportedReports.length;
-      alert(`Download functionality is currently only available for ASIC Current and ASIC Historical reports. ${unsupportedCount} other report type(s) will be skipped.`);
+      alert(`Download is currently only available for ASIC Current/Historical, PPSR, and COURT. ${unsupportedCount} other report type(s) will be skipped.`);
     }
 
     try {
       for (const report of supportedReports) {
-        // Determine the report type for PDF generation
-        let pdfType = 'ASIC'; // Both asic-current and asic-historical map to ASIC
+        // Determine the report type for PDF generation similar to MatterReports
+        let pdfType = 'ASIC';
+        if (report.type === 'ppsr') {
+          pdfType = 'PPSR';
+        } else if (report.type === 'court') {
+          pdfType = 'COURT';
+        } else {
+          // asic-current / asic-historical map to ASIC
+          pdfType = 'ASIC';
+        }
         
-        // Get the report ID from the correct field
-        const reportId = report.reportId || report.id;
-        console.log(`Downloading report: ${reportId}, Type: ${pdfType}`);
-        console.log('Report object:', report);
-        console.log('All generated reports:', generatedReports);
-        
+        // Resolve the DB report id
+        const reportId = report.reportId ?? report.id;
         if (!reportId) {
           console.error('No report ID found in report object:', report);
           continue;
         }
         
         const { blob, filename } = await apiService.generatePDF(reportId, pdfType);
-        
         
         // Create download link
         const url = window.URL.createObjectURL(blob);
